@@ -24,10 +24,12 @@ jobs:
 
   app-build:
     name: Build app (simulator, unsigned)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: core-tests
     steps:
       - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
