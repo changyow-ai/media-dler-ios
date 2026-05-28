@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MediaDlerCore
 
 struct HomeView: View {
@@ -151,7 +152,7 @@ struct TaskRow: View {
         case .completed: return .green
         case .failed: return .red
         case .downloading, .processing: return .blue
-        default: return .secondary
+        default: return .gray
         }
     }
 
