@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
+  # Recent XcodeGen writes objectVersion = 77 (Xcode 16 format), which older
+  # Xcode (15.x) refuses to open ("future Xcode project file format"). Lower it
+  # to 55 so the project opens in Xcode 14/15/16. (XcodeGen #1578)
+  postGenCommand: "sed -i '' -E 's/objectVersion = [0-9]+;/objectVersion = 55;/' MediaDler.xcodeproj/project.pbxproj"
 
 packages:
   MediaDlerCore:
