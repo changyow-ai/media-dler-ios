@@ -71,3 +71,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.changyow.mediadler.share
     dependencies:
       - package: MediaDlerCore
+
+schemes:
+  MediaDler:
+    build:
+      targets:
+        MediaDler: all
+    run:
+      config: Debug
