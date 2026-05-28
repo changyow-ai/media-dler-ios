@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single downloadable piece of media resolved from a shared URL.
-public struct MediaItem: Equatable {
+public struct MediaItem: Equatable, Identifiable {
     public let sourceUrl: String
     public let playlistIndex: Int?
     public let id: String

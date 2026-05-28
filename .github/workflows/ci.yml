@@ -34,9 +34,4 @@ jobs:
             -project MediaDler.xcodeproj \
             -scheme MediaDler \
             -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify || \
-          xcodebuild build \
-            -project MediaDler.xcodeproj \
-            -scheme MediaDler \
-            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
