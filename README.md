@@ -18,10 +18,11 @@ iOS 版的 **media-dler** — 從其他 App「分享」或貼上一個連結，�
 - **下載清單**：進行中與歷史，可重試 / 刪除。
 - **引擎線上更新**：啟動時背景更新 yt-dlp，解析失敗時自動更新重試，設定頁也可手動更新。
 
+- **Threads（Meta）**：yt-dlp 無 extractor，故自行抓 `/embed` 頁、解析直連 cdninstagram 媒體，**影片與圖片都直接存入照片庫**（`ThreadsService` + `DirectMediaSaver`，純解析邏輯在 `MediaDlerCore` 有單元測試）。純圖多圖輪播仍受限（需登入，多半只拿得到首圖）。
+
 ### 已知限制 / 後續
-- **多圖輪播逐項勾選** 與 **單張圖片下載**：受函式庫 typed `Info`（無 `entries`）與其 Photos-video 匯出限制，列為後續；v0.1 以單一影片 / 音訊為主。
+- **一般站的多圖輪播逐項勾選** 與 **單張圖片下載**：受函式庫 typed `Info`（無 `entries`）與其 Photos-video 匯出限制，列為後續；yt-dlp 路徑 v0.1 以單一影片 / 音訊為主。
 - **音訊→檔案** 路徑依賴函式庫的轉檔輸出，標記為實驗性。
-- Threads 專用 extractor（Android 版有）：後續移植。
 
 ---
 

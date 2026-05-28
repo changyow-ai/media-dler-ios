@@ -14,7 +14,11 @@ final class AppModel: ObservableObject {
     @Published var pendingPick: MediaItem?
     @Published var engineVersion: String?
 
-    private struct Job { let taskId: String; let request: DownloadRequest }
+    private enum JobKind {
+        case engine(FormatSelection)
+        case directToPhotos
+    }
+    private struct Job { let taskId: String; let item: MediaItem; let kind: JobKind }
     private var queue: [Job] = []
     private var running = false
 
@@ -50,6 +54,17 @@ final class AppModel: ObservableObject {
         isExtracting = true
         defer { isExtracting = false }
         do {
+            // Threads has no yt-dlp extractor: resolve it ourselves and download
+            // the direct CDN media (all items in the post) straight to Photos.
+            if ThreadsService.isThreads(url.absoluteString) {
+                let items = try await ThreadsService.extract(url.absoluteString)
+                guard !items.isEmpty else {
+                    throw EngineError.noMedia("Threads 貼文沒有可下載媒體（純文字，或需登入的多圖輪播）。")
+                }
+                items.forEach { enqueueDirect($0) }
+                return
+            }
+
             let item = try await engine.extract(url)
             if settings.settings.shareMode == .oneTap {
                 let selection = SelectionPlanner.defaultSelection(item, settings: settings.settings)
@@ -65,12 +80,20 @@ final class AppModel: ObservableObject {
     // MARK: Queue
 
     func submit(item: MediaItem, selection: FormatSelection) {
+        enqueue(item: item, label: label(for: selection), kind: .engine(selection))
+    }
+
+    private func enqueueDirect(_ item: MediaItem) {
+        enqueue(item: item, label: item.isImage ? "圖片" : "影片", kind: .directToPhotos)
+    }
+
+    private func enqueue(item: MediaItem, label: String, kind: JobKind) {
         let task = DownloadTask(
             id: UUID().uuidString,
             title: item.title,
             sourceUrl: item.sourceUrl,
             thumbnailUrl: item.thumbnailUrl,
-            formatLabel: label(for: selection),
+            formatLabel: label,
             status: .queued,
             progress: 0,
             outputUri: nil,
@@ -80,7 +103,7 @@ final class AppModel: ObservableObject {
         )
         tasks.insert(task, at: 0)
         persist()
-        queue.append(Job(taskId: task.id, request: DownloadRequest(item: item, selection: selection)))
+        queue.append(Job(taskId: task.id, item: item, kind: kind))
         pump()
     }
 
@@ -108,6 +131,14 @@ final class AppModel: ObservableObject {
 
     private func run(_ job: Job) async {
         update(job.taskId) { $0.status = .downloading }
+        switch job.kind {
+        case .engine(let selection): await runEngine(job, selection: selection)
+        case .directToPhotos: await runDirect(job)
+        }
+        persist()
+    }
+
+    private func runEngine(_ job: Job, selection: FormatSelection) async {
         let progressTask = Task { @MainActor in
             while !Task.isCancelled {
                 update(job.taskId) { $0.progress = engine.progress.fractionCompleted }
@@ -115,12 +146,12 @@ final class AppModel: ObservableObject {
             }
         }
         do {
-            let fileURL = try await engine.download(item: job.request.item, selection: job.request.selection)
+            let fileURL = try await engine.download(item: job.item, selection: selection)
             progressTask.cancel()
             var output: String?
             var mime: String?
-            if case .audio = job.request.selection {
-                let saved = DocumentsStorage.save(fileURL, preferredName: job.request.item.title)
+            if case .audio = selection {
+                let saved = DocumentsStorage.save(fileURL, preferredName: job.item.title)
                 output = saved.map { "檔案 App → media-dler → \($0.lastPathComponent)" }
                 mime = "audio/\(fileURL.pathExtension)"
             } else {
@@ -140,7 +171,23 @@ final class AppModel: ObservableObject {
                 $0.errorMessage = error.localizedDescription
             }
         }
-        persist()
+    }
+
+    private func runDirect(_ job: Job) async {
+        do {
+            try await DirectMediaSaver.saveToPhotos(job.item)
+            update(job.taskId) {
+                $0.status = .completed
+                $0.progress = 1
+                $0.outputUri = "已儲存到「照片」App"
+                $0.mimeType = job.item.isImage ? "image" : "video"
+            }
+        } catch {
+            update(job.taskId) {
+                $0.status = .failed
+                $0.errorMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: Helpers
