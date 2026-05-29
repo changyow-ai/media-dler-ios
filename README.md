@@ -44,12 +44,26 @@ project.yml         XcodeGen 專案定義。
 
 需求：**macOS + Xcode**（編譯 App）；[XcodeGen](https://github.com/yonaskolb/XcodeGen) 產生專案。
 
+> ⚠️ **repo 內沒有 `.xcodeproj`，這是正常的。** 它是 XcodeGen 依 `project.yml` 產生的衍生檔，已列入 `.gitignore`（避免 `project.pbxproj` 的 merge conflict）。**Xcode 不會因為你打開資料夾就自動生成它**——第一次取得原始碼後，必須先執行一次 `xcodegen generate`。專案設定的唯一來源是 `project.yml`；之後改了它、或新增／刪除原始檔，都要重跑 `xcodegen generate` 讓專案檔同步。
+
+最快的方式是用根目錄的 `Makefile`：
+
 ```bash
+make open       # xcodegen generate 之後用 Xcode 開啟（需 macOS + Xcode）
+make test-core  # 跑核心純邏輯單元測試（不需 Xcode；Linux 亦可）
+make help       # 列出所有指令
+```
+
+或手動執行：
+
+```bash
+# 0) 安裝 XcodeGen（只需一次）
+brew install xcodegen
+
 # 1) 純邏輯單元測試（最快的回饋，不需 Xcode 模擬器；亦可在 Linux Swift toolchain 跑）
 cd MediaDlerCore && swift test
 
-# 2) 產生 Xcode 專案
-brew install xcodegen
+# 2) 產生 Xcode 專案（讀 project.yml → 產生 MediaDler.xcodeproj）
 xcodegen generate
 
 # 3) 開啟並執行
