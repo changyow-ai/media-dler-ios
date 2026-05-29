@@ -6,6 +6,7 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @State private var urlText = ""
     @State private var showSettings = false
+    @State private var showClearConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -19,9 +20,22 @@ struct HomeView: View {
             }
             .navigationTitle("media-dler")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !model.tasks.isEmpty {
+                        Button(role: .destructive) { showClearConfirm = true } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
+            }
+            .confirmationDialog("清空全部下載紀錄？", isPresented: $showClearConfirm, titleVisibility: .visible) {
+                Button("清空", role: .destructive) { model.clearAll() }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("存在 App 資料夾的檔案會一併刪除；已存到「照片」App 的內容不受影響。")
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView(settings: model.settings)
@@ -113,22 +127,31 @@ struct TaskRow: View {
     let task: DownloadTask
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(task.title).font(.body).lineLimit(2)
-            HStack(spacing: 6) {
-                statusIcon
-                Text(statusText).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Text(task.formatLabel).font(.caption2).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            PreviewThumb(task: task)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title).font(.body).lineLimit(2)
+                HStack(spacing: 6) {
+                    statusIcon
+                    Text(statusText).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(task.formatLabel).font(.caption2).foregroundStyle(.secondary)
+                }
+                if task.status == .downloading {
+                    ProgressView(value: max(0, min(1, task.progress)))
+                }
+                if let info = task.outputUri, task.status == .completed {
+                    Text(info).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if let err = task.errorMessage, task.status == .failed {
+                    Text(err).font(.caption2).foregroundStyle(.red).textSelection(.enabled)
+                }
             }
-            if task.status == .downloading {
-                ProgressView(value: max(0, min(1, task.progress)))
-            }
-            if let info = task.outputUri, task.status == .completed {
-                Text(info).font(.caption2).foregroundStyle(.secondary)
-            }
-            if let err = task.errorMessage, task.status == .failed {
-                Text(err).font(.caption2).foregroundStyle(.red).textSelection(.enabled)
+            if task.status == .completed, let path = task.localPath {
+                ShareLink(item: URL(fileURLWithPath: path)) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderless)
             }
         }
         .padding(.vertical, 4)
@@ -167,4 +190,53 @@ struct TaskRow: View {
         case .canceled: return "已取消"
         }
     }
+}
+
+/// Small leading preview: a locally-generated thumbnail when available, else the
+/// remote thumbnail, else a kind-appropriate placeholder icon. Videos get a play
+/// badge so they're distinguishable from images at a glance.
+struct PreviewThumb: View {
+    let task: DownloadTask
+    private let side: CGFloat = 52
+
+    var body: some View {
+        thumbnail
+            .frame(width: side, height: side)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                if isVideo {
+                    Image(systemName: "play.circle.fill")
+                        .foregroundStyle(.white)
+                        .shadow(radius: 2)
+                        .font(.title3)
+                }
+            }
+    }
+
+    @ViewBuilder private var thumbnail: some View {
+        if let path = task.previewPath, let image = UIImage(contentsOfFile: path) {
+            Image(uiImage: image).resizable().scaledToFill()
+        } else if let t = task.thumbnailUrl, let url = URL(string: t) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    placeholder
+                }
+            }
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        Image(systemName: isImage ? "photo" : (isAudio ? "music.note" : "film"))
+            .font(.title3)
+            .foregroundStyle(.secondary)
+    }
+
+    private var isVideo: Bool { task.mimeType?.hasPrefix("video") ?? false }
+    private var isImage: Bool { task.mimeType?.hasPrefix("image") ?? false }
+    private var isAudio: Bool { task.mimeType?.hasPrefix("audio") ?? false }
 }

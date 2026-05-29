@@ -42,6 +42,8 @@ public struct MediaFormat: Equatable {
     public let hasAudio: Bool
     public let isImage: Bool
     public let filesizeBytes: Int64?
+    public let vcodec: String?
+    public let acodec: String?
 
     public init(
         formatId: String,
@@ -51,7 +53,9 @@ public struct MediaFormat: Equatable {
         hasVideo: Bool,
         hasAudio: Bool,
         isImage: Bool,
-        filesizeBytes: Int64?
+        filesizeBytes: Int64?,
+        vcodec: String? = nil,
+        acodec: String? = nil
     ) {
         self.formatId = formatId
         self.ext = ext
@@ -61,6 +65,8 @@ public struct MediaFormat: Equatable {
         self.hasAudio = hasAudio
         self.isImage = isImage
         self.filesizeBytes = filesizeBytes
+        self.vcodec = vcodec
+        self.acodec = acodec
     }
 }
 
@@ -85,6 +91,9 @@ public struct DownloadTask: Equatable, Codable {
     public var errorMessage: String?
     public let createdAt: Double
     public var previewPath: String?
+    /// Absolute path of the saved file when stored in the app folder (nil for
+    /// items saved to the Photos library). Used for share + delete-on-remove.
+    public var localPath: String?
 
     public init(
         id: String,
@@ -98,7 +107,8 @@ public struct DownloadTask: Equatable, Codable {
         mimeType: String?,
         errorMessage: String?,
         createdAt: Double,
-        previewPath: String? = nil
+        previewPath: String? = nil,
+        localPath: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -112,6 +122,7 @@ public struct DownloadTask: Equatable, Codable {
         self.errorMessage = errorMessage
         self.createdAt = createdAt
         self.previewPath = previewPath
+        self.localPath = localPath
     }
 }
 

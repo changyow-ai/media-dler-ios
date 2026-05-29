@@ -43,12 +43,17 @@ public enum FormatPicker {
         }
         let capped: [MediaFormat]
         if let maxHeight {
-            let within = videos.filter { ($0.height ?? 0) <= maxHeight }
+            // Use inferredHeight so 'hd'/'sd'-style ids (no numeric height) are
+            // capped consistently with how byQuality ranks them — otherwise a
+            // height-less 'hd' (720p) reads as 0 and slips under any cap.
+            let within = videos.filter { inferredHeight($0) <= maxHeight }
             capped = within.isEmpty ? videos : within
         } else {
             capped = videos
         }
-        guard let best = capped.max(by: byQuality) else { return [] }
+        let photoCompatible = capped.filter(isPhotoCompatibleVideo)
+        let candidates = photoCompatible.isEmpty ? capped : photoCompatible
+        guard let best = candidates.max(by: byQuality) else { return [] }
         if best.hasAudio { return [best.formatId] }
         if let a = bestAudioOnly(formats) { return [best.formatId, a.formatId] }
         return [best.formatId]
@@ -59,7 +64,18 @@ public enum FormatPicker {
     }
 
     private static func bestAudioOnly(_ formats: [MediaFormat]) -> MediaFormat? {
-        formats.filter { $0.hasAudio && !$0.hasVideo }.max(by: byFilesize)
+        let audioOnly = formats.filter { $0.hasAudio && !$0.hasVideo }
+        // Prefer audio AVFoundation can actually mux into mp4 (AAC / m4a). The
+        // in-app merge can't read Opus/webm, so only fall back to it when no
+        // compatible audio stream exists.
+        let compatible = audioOnly.filter(isAVFoundationCompatibleAudio)
+        return (compatible.isEmpty ? audioOnly : compatible).max(by: byFilesize)
+    }
+
+    private static func isAVFoundationCompatibleAudio(_ format: MediaFormat) -> Bool {
+        if ["m4a", "mp4", "aac"].contains(format.ext.lowercased()) { return true }
+        guard let codec = format.acodec?.lowercased(), codec != "none" else { return false }
+        return codec.hasPrefix("mp4a") || codec.hasPrefix("aac")
     }
 
     private static func bestImage(_ formats: [MediaFormat]) -> MediaFormat? {
@@ -69,12 +85,29 @@ public enum FormatPicker {
 
     /// Higher resolution wins; ties broken by larger file size.
     private static func byQuality(_ a: MediaFormat, _ b: MediaFormat) -> Bool {
-        let ha = a.height ?? 0, hb = b.height ?? 0
+        let ha = inferredHeight(a), hb = inferredHeight(b)
         if ha != hb { return ha < hb }
         return (a.filesizeBytes ?? 0) < (b.filesizeBytes ?? 0)
     }
 
     private static func byFilesize(_ a: MediaFormat, _ b: MediaFormat) -> Bool {
         (a.filesizeBytes ?? 0) < (b.filesizeBytes ?? 0)
+    }
+
+    private static func isPhotoCompatibleVideo(_ format: MediaFormat) -> Bool {
+        guard format.hasVideo, format.ext == "mp4" else { return false }
+        guard let codec = format.vcodec?.lowercased(), codec != "none" else {
+            return true
+        }
+        return codec.hasPrefix("avc1") || codec.hasPrefix("h264")
+    }
+
+    private static func inferredHeight(_ format: MediaFormat) -> Int {
+        if let height = format.height { return height }
+        switch format.formatId.lowercased() {
+        case "hd": return 720
+        case "sd": return 360
+        default: return 0
+        }
     }
 }

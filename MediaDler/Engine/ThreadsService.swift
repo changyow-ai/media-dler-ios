@@ -18,6 +18,7 @@ enum ThreadsService {
             return []
         }
         var request = URLRequest(url: embedURL)
+        request.timeoutInterval = 20
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let (data, _) = try await URLSession.shared.data(for: request)
         let html = String(decoding: data, as: UTF8.self)

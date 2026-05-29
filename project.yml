@@ -22,8 +22,15 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "3923UH7ZW6"
     CODE_SIGN_STYLE: Automatic
+  configs:
+    Release:
+      # YoutubeDL-iOS/PythonKit crashes inside extractInfo on device when built
+      # with Swift release optimization. Keep Release unoptimized until the
+      # dependency can be upgraded or isolated.
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_COMPILATION_MODE: singlefile
 
 targets:
   MediaDler:
@@ -47,6 +54,7 @@ targets:
               - mediadler
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: com.changyow.mediadler
     dependencies:
       - package: MediaDlerCore

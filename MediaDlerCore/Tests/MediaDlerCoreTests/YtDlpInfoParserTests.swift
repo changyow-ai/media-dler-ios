@@ -79,6 +79,21 @@ final class YtDlpInfoParserTests: XCTestCase {
         XCTAssertEqual(0, YtDlpInfoParser.parse(json, requestUrl: "https://x/chan").count)
     }
 
+    // An audio-only format that carries video_ext == "" (rather than "none")
+    // must not be misclassified as having a video track.
+    func testEmptyVideoExtIsNotTreatedAsVideo() {
+        let json = """
+        {"id":"e","title":"Audio","ext":"m4a","webpage_url":"https://x/e","formats":[
+          {"format_id":"140","ext":"m4a","vcodec":"none","acodec":"mp4a","video_ext":"","audio_ext":"m4a","filesize":800}
+        ]}
+        """
+        let items = YtDlpInfoParser.parse(json, requestUrl: "https://x/e")
+        XCTAssertEqual(1, items.count)
+        let f = items[0].formats.first { $0.formatId == "140" }!
+        XCTAssertFalse(f.hasVideo)
+        XCTAssertTrue(f.hasAudio)
+    }
+
     func testImageUrlWithDottedQueryIsClassifiedAsImage() {
         let json = #"{"id":"i","title":"P","url":"http://cdn/photo.jpg?v=1.0&x=a.b"}"#
         let items = YtDlpInfoParser.parse(json, requestUrl: "http://cdn/photo.jpg")

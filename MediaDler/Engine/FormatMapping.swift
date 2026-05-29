@@ -10,8 +10,11 @@ enum FormatMapping {
     static func mediaFormat(_ f: Format) -> MediaFormat {
         let ext = f.ext.lowercased()
         let isImage = imageExts.contains(ext)
-        let hasVideo = (f.vcodec ?? "none") != "none"
-        let hasAudio = (f.acodec ?? "none") != "none"
+        // Treat an empty ext as "absent", not as a real track: some extractors
+        // emit video_ext == "" (rather than "none") for an audio-only stream,
+        // which would otherwise misclassify it as having video.
+        let hasVideo = (f.vcodec ?? "none") != "none" || (f.video_ext != "none" && !f.video_ext.isEmpty)
+        let hasAudio = (f.acodec ?? "none") != "none" || (f.audio_ext != "none" && !f.audio_ext.isEmpty)
         let label: String
         if isImage {
             label = "圖片 \(ext.uppercased())"
@@ -30,7 +33,9 @@ enum FormatMapping {
             hasVideo: hasVideo,
             hasAudio: hasAudio,
             isImage: isImage,
-            filesizeBytes: f.filesize.map(Int64.init)
+            filesizeBytes: f.filesize.map(Int64.init),
+            vcodec: f.vcodec,
+            acodec: f.acodec
         )
     }
 

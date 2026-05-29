@@ -4,8 +4,11 @@ import Foundation
 /// page's HTML. Avatars (profile-pic namespace) and static UI assets are skipped.
 public enum ThreadsEmbedParser {
     private static let imageExts: Set<String> = ["jpg", "jpeg", "png", "webp", "heic"]
+    // Threads images live on *.cdninstagram.com, but videos are now served from
+    // *.fbcdn.net (e.g. instagram.<dc>.fna.fbcdn.net). Match both, or video posts
+    // resolve to zero media.
     private static let cdnRe = Re.compile(
-        "https://[a-z0-9_.-]*cdninstagram\\.com/[^\"'\\\\ )<>]+",
+        "https://[a-z0-9_.-]*(?:cdninstagram\\.com|fbcdn\\.net)/[^\"'\\\\ )<>]+",
         caseInsensitive: true
     )
     private static let profilePicRe = Re.compile("/t51\\.\\d+-19/")

@@ -105,6 +105,8 @@ public enum YtDlpInfoParser {
         let ext: String?
         let vcodec: String?
         let acodec: String?
+        let videoExt: String?
+        let audioExt: String?
         let height: Int?
         let width: Int?
         let formatNote: String?
@@ -117,13 +119,17 @@ public enum YtDlpInfoParser {
             case formatId = "format_id"
             case formatNote = "format_note"
             case filesizeApprox = "filesize_approx"
+            case videoExt = "video_ext"
+            case audioExt = "audio_ext"
         }
 
         func toMediaFormat() -> MediaFormat? {
             let e = (ext ?? "").lowercased()
             let isImage = imageExts.contains(e)
-            let hasVideo = vcodec != nil && vcodec != "none"
-            let hasAudio = acodec != nil && acodec != "none"
+            // An empty ext means "absent", not a real track (some extractors emit
+            // video_ext == "" for audio-only streams) — treat it like "none".
+            let hasVideo = (vcodec != nil && vcodec != "none") || (videoExt.map { $0 != "none" && !$0.isEmpty } ?? false)
+            let hasAudio = (acodec != nil && acodec != "none") || (audioExt.map { $0 != "none" && !$0.isEmpty } ?? false)
             // Drop storyboards / non-media rows (e.g. mhtml previews).
             if !isImage && !hasVideo && !hasAudio { return nil }
             guard let fid = formatId else { return nil }
@@ -135,7 +141,9 @@ public enum YtDlpInfoParser {
                 hasVideo: hasVideo,
                 hasAudio: hasAudio,
                 isImage: isImage,
-                filesizeBytes: filesize ?? filesizeApprox
+                filesizeBytes: filesize ?? filesizeApprox,
+                vcodec: vcodec,
+                acodec: acodec
             )
         }
     }

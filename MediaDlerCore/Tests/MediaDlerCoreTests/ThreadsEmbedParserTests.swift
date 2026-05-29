@@ -41,6 +41,21 @@ final class ThreadsEmbedParserTests: XCTestCase {
         XCTAssertTrue(items[1].isImage)
     }
 
+    func testVideoOnFbcdnHostIsExtracted() {
+        // Threads now serves videos from *.fbcdn.net (images stay on cdninstagram).
+        let html = """
+        <video src="https://instagram.fkhh1-1.fna.fbcdn.net/o1/v/t2/f2/m366/AQ_clip.mp4?_nc_cat=1&amp;oh=9"></video>
+        <img src="https://scontent-x.cdninstagram.com/v/t51.82787-19/av_n.jpg?stp=dst-jpg_s100x100"/>
+        """
+        let items = ThreadsEmbedParser.parse(embedHtml: html, postUrl: post)
+        XCTAssertEqual(1, items.count)
+        XCTAssertFalse(items[0].isImage)
+        XCTAssertTrue(items[0].sourceUrl.contains("fbcdn.net"))
+        XCTAssertTrue(items[0].sourceUrl.contains("AQ_clip.mp4"))
+        XCTAssertTrue(items[0].sourceUrl.contains("oh=9"))
+        XCTAssertEqual("ThreadsVideo_ABC123", items[0].title)
+    }
+
     func testTextOnlyReturnsEmpty() {
         XCTAssertEqual(0, ThreadsEmbedParser.parse(embedHtml: "<div>hello world</div>", postUrl: post).count)
     }

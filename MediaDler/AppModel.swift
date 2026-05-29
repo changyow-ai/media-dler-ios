@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
     // MARK: Entry points
 
     func handle(text: String?) {
+        MDLog.log("AppModel.handle(text:) raw=\(text ?? "nil") isExtracting=\(isExtracting)")
         guard let raw = UrlExtractor.firstUrl(text), let url = URL(string: raw) else {
             banner = "剪貼簿或連結中找不到有效的網址。"
             return
@@ -42,6 +43,7 @@ final class AppModel: ObservableObject {
     }
 
     func handle(deepLink: URL) {
+        MDLog.log("AppModel.handle(deepLink:) \(deepLink.absoluteString)")
         guard let components = URLComponents(url: deepLink, resolvingAgainstBaseURL: false),
               components.scheme == "mediadler" else { return }
         let urlParam = components.queryItems?.first(where: { $0.name == "url" })?.value
@@ -51,13 +53,20 @@ final class AppModel: ObservableObject {
     // MARK: Extraction
 
     private func extract(_ url: URL) async {
+        MDLog.log("AppModel.extract: ENTER isExtracting(before)=\(isExtracting) url=\(url.absoluteString)")
+        guard !isExtracting else {
+            banner = "正在解析上一個連結，請稍候。"
+            MDLog.log("AppModel.extract: ignored duplicate extract while busy")
+            return
+        }
         isExtracting = true
-        defer { isExtracting = false }
+        defer { isExtracting = false; MDLog.log("AppModel.extract: EXIT (isExtracting=false)") }
         do {
             // Threads has no yt-dlp extractor: resolve it ourselves and download
             // the direct CDN media (all items in the post) straight to Photos.
             if ThreadsService.isThreads(url.absoluteString) {
                 let items = try await ThreadsService.extract(url.absoluteString)
+                MDLog.log("Threads.extract: returned \(items.count) item(s): \(items.map { ($0.isImage ? "img" : "vid") + ":" + $0.title }.joined(separator: ", "))")
                 guard !items.isEmpty else {
                     throw EngineError.noMedia("Threads 貼文沒有可下載媒體（純文字，或需登入的多圖輪播）。")
                 }
@@ -113,9 +122,29 @@ final class AppModel: ObservableObject {
     }
 
     func remove(_ task: DownloadTask) {
+        deleteFiles(of: task)
         tasks.removeAll { $0.id == task.id }
         queue.removeAll { $0.taskId == task.id }
         persist()
+    }
+
+    /// Removes every history item. App-folder files and previews are deleted;
+    /// items saved to the Photos library are left there (the user manages those).
+    func clearAll() {
+        tasks.forEach(deleteFiles)
+        tasks.removeAll()
+        queue.removeAll()
+        ThumbnailMaker.removeAll()
+        persist()
+    }
+
+    /// Deletes the on-disk artifacts owned by a task: the stored file (only if it
+    /// lives in the app folder) and its local preview thumbnail.
+    private func deleteFiles(of task: DownloadTask) {
+        if let path = task.localPath {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+        }
+        ThumbnailMaker.remove(id: task.id)
     }
 
     private func pump() {
@@ -146,23 +175,31 @@ final class AppModel: ObservableObject {
             }
         }
         do {
-            let fileURL = try await engine.download(item: job.item, selection: selection)
-            progressTask.cancel()
-            var output: String?
-            var mime: String?
-            if case .audio = selection {
-                let saved = DocumentsStorage.save(fileURL, preferredName: job.item.title)
-                output = saved.map { "檔案 App → media-dler → \($0.lastPathComponent)" }
-                mime = "audio/\(fileURL.pathExtension)"
-            } else {
-                output = "已儲存到「照片」App"
-                mime = "video/\(fileURL.pathExtension)"
+            MDLog.log("runEngine: starting download (calls extractInfo internally) task=\(job.taskId)")
+            let fileURL = try await MDLog.watch("engine.download") {
+                try await engine.download(item: job.item, selection: selection)
             }
+            progressTask.cancel()
+            defer { try? FileManager.default.removeItem(at: fileURL) }
+
+            let isAudio: Bool = { if case .audio = selection { return true }; return false }()
+            let kind: MediaContentKind = isAudio ? .audio : (job.item.isImage ? .image : .video)
+            // Build the preview from the temp file before it is moved/consumed.
+            let preview = kind == .audio ? nil
+                : ThumbnailMaker.make(from: fileURL, isImage: kind == .image, id: job.taskId)
+            let saved = try await MediaSink.save(
+                tempFile: fileURL,
+                kind: kind,
+                title: job.item.title,
+                destination: settings.settings.storageDestination
+            )
             update(job.taskId) {
                 $0.status = .completed
                 $0.progress = 1
-                $0.outputUri = output
-                $0.mimeType = mime
+                $0.outputUri = saved.outputUri
+                $0.mimeType = saved.mimeType
+                $0.localPath = saved.localPath
+                $0.previewPath = preview
             }
         } catch {
             progressTask.cancel()
@@ -175,14 +212,28 @@ final class AppModel: ObservableObject {
 
     private func runDirect(_ job: Job) async {
         do {
-            try await DirectMediaSaver.saveToPhotos(job.item)
+            MDLog.log("runDirect: saving \(job.item.isImage ? "image" : "video") \(job.item.title) src=\(job.item.sourceUrl.prefix(80))")
+            let fileURL = try await DirectMediaSaver.download(job.item)
+            defer { try? FileManager.default.removeItem(at: fileURL) }
+            let kind: MediaContentKind = job.item.isImage ? .image : .video
+            let preview = ThumbnailMaker.make(from: fileURL, isImage: job.item.isImage, id: job.taskId)
+            let saved = try await MediaSink.save(
+                tempFile: fileURL,
+                kind: kind,
+                title: job.item.title,
+                destination: settings.settings.storageDestination
+            )
+            MDLog.log("runDirect: ✓ saved (\(saved.localPath ?? "photos")): \(job.item.title)")
             update(job.taskId) {
                 $0.status = .completed
                 $0.progress = 1
-                $0.outputUri = "已儲存到「照片」App"
-                $0.mimeType = job.item.isImage ? "image" : "video"
+                $0.outputUri = saved.outputUri
+                $0.mimeType = saved.mimeType
+                $0.localPath = saved.localPath
+                $0.previewPath = preview
             }
         } catch {
+            MDLog.log("runDirect: ✗ FAILED \(job.item.title): \(error)")
             update(job.taskId) {
                 $0.status = .failed
                 $0.errorMessage = error.localizedDescription

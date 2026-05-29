@@ -16,6 +16,13 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("儲存位置") {
+                    Picker("影片 / 圖片存到", selection: $settings.settings.storageDestination) {
+                        Text("照片 App").tag(StorageDestination.photos)
+                        Text("App 資料夾").tag(StorageDestination.appFolder)
+                    }
+                }
+
                 Section("一鍵下載預設") {
                     Picker("類型", selection: $settings.settings.defaultMediaKind) {
                         Text("影片").tag(MediaKind.video)
@@ -43,7 +50,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("影片與圖片會存入「照片」App，音訊（MP3 / M4A）會存入「檔案」App 的 media-dler 資料夾。")
+                    Text(storageHint)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -54,6 +61,15 @@ struct SettingsView: View {
                     Button("完成") { dismiss() }
                 }
             }
+        }
+    }
+
+    private var storageHint: String {
+        switch settings.settings.storageDestination {
+        case .photos:
+            return "影片與圖片會存入「照片」App；音訊（MP3 / M4A）一律存入 App 資料夾（可在「檔案」App 開啟）。"
+        case .appFolder:
+            return "影片、圖片與音訊都存入 App 資料夾，可在「檔案」App 開啟，也能從列表分享到其他 App。"
         }
     }
 
