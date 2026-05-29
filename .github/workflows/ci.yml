@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  core-tests:
+    name: MediaDlerCore unit tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Run tests
+        working-directory: MediaDlerCore
+        run: swift test
+
+  app-build:
+    name: Build app (simulator, unsigned)
+    runs-on: macos-15
+    needs: core-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate 2>&1 | tee -a build.log
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project MediaDler.xcodeproj \
+            -scheme MediaDler \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee -a build.log
+      - name: Report build log tail on failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '🛠️ **app-build failed** — last lines of the build log:'
+            echo ''
+            echo '```'
+            grep -E "error:|warning:|fatal|Could not|does not contain|Unable|cannot find|No such|exit code" build.log | tail -n 60 || true
+            echo '--- raw tail ---'
+            tail -n 80 build.log
+            echo '```'
+          } > comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file comment.md

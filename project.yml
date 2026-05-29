@@ -1,0 +1,85 @@
+name: MediaDler
+options:
+  bundleIdPrefix: com.changyow.mediadler
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  # Recent XcodeGen writes objectVersion = 77 (Xcode 16 format), which older
+  # Xcode (15.x) refuses to open ("future Xcode project file format"). Lower it
+  # to 55 so the project opens in Xcode 14/15/16. (XcodeGen #1578)
+  postGenCommand: "sed -i '' -E 's/objectVersion = [0-9]+;/objectVersion = 55;/' MediaDler.xcodeproj/project.pbxproj"
+
+packages:
+  MediaDlerCore:
+    path: MediaDlerCore
+  YoutubeDL:
+    url: https://github.com/kewlbear/YoutubeDL-iOS
+    from: "0.0.2"
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  MediaDler:
+    type: application
+    platform: iOS
+    sources:
+      - path: MediaDler
+    info:
+      path: MediaDler/Info.plist
+      properties:
+        CFBundleDisplayName: media-dler
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSPhotoLibraryAddUsageDescription: 儲存下載的影片到你的相簿。
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        CFBundleURLTypes:
+          - CFBundleURLName: com.changyow.mediadler
+            CFBundleURLSchemes:
+              - mediadler
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.changyow.mediadler
+    dependencies:
+      - package: MediaDlerCore
+      - package: YoutubeDL
+        product: YoutubeDL
+      - target: MediaDlerShare
+
+  MediaDlerShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: media-dler
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.changyow.mediadler.share
+    dependencies:
+      - package: MediaDlerCore
+
+schemes:
+  MediaDler:
+    build:
+      targets:
+        MediaDler: all
+    run:
+      config: Debug

@@ -1,6 +1,14 @@
 # 計劃:media-dler iOS — 分享下載 App（iOS 版）
 
-> 本計劃由 Android 版 [`media-dler`](https://github.com/changyow-ai/media-dler) 的 [plan](https://github.com/changyow-ai/media-dler/blob/main/plan/media-dler-plan.md) 改寫而來，對齊功能、按 iOS 平台限制重新設計引擎、儲存與分享入口。**尚未實作**;下文為設計與待踩坑預判,標 ⚠️ 的是 iOS 特有、最可能卡住的地方。
+> 本計劃由 Android 版 [`media-dler`](https://github.com/changyow-ai/media-dler) 的 [plan](https://github.com/changyow-ai/media-dler/blob/main/plan/media-dler-plan.md) 改寫而來，對齊功能、按 iOS 平台限制重新設計引擎、儲存與分享入口。
+>
+> **實作狀態（v0.1）**：`MediaDlerCore`（純 Swift，40 個 XCTest）已用 Swift 6.0.3 toolchain **本機驗證綠燈**；SwiftUI App + Share Extension + XcodeGen 專案 + CI 已完成並推送。⚠️ App / Extension target 需 Xcode（UIKit/Photos/PythonKit），**無法在 Linux 本機編譯**，由 GitHub Actions（macOS runner）的 `app-build` job 把關。
+>
+> **實作期間的關鍵發現（已反映在程式碼）**：
+> - YoutubeDL-iOS 的格式選擇是 **client-side**：`download(formatSelector:)` 的閉包回傳要下載的 `Format` 物件（結尾的 `String` 是標題，不是 yt-dlp `-f` 字串）。故新增可單測的 `FormatPicker`（挑 `format_id`），取代 Android 的 `-f` 字串路徑。
+> - 函式庫的 `export` **寫死把完成的影片匯出到照片庫**（`creationRequestForAssetFromVideo`），正好符合「影片→Photos」需求；音訊則由 App 複製到 Documents。
+> - typed `Info` **沒有 `entries`**，故輪播逐項勾選與單張圖片下載受限，列為後續（v0.1 以單一影片 / 音訊為主）。
+> - 下文標 ⚠️ 的是 iOS 特有、最可能卡住的地方。
 
 ## Context(為什麼做這個)
 
