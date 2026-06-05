@@ -7,6 +7,7 @@ import MediaDlerCore
 final class AppModel: ObservableObject {
     let engine = YtDlpEngine()
     let settings = SettingsStore()
+    let transcription = TranscriptionManager.shared
 
     @Published var tasks: [DownloadTask] = HistoryStore.load()
     @Published var isExtracting = false
@@ -31,6 +32,7 @@ final class AppModel: ObservableObject {
     func start() {
         engineVersion = engine.version
         engine.warmUpInBackground()
+        TranscriptionRunner.requestNotificationPermission()
     }
 
     func refreshEngine() {

@@ -1,39 +1,163 @@
 import SwiftUI
+import UIKit
 import MediaDlerCore
 
-/// Progress + result screen for a transcription job. M0 is a skeleton that
-/// confirms the local-file → menu → result-page wiring; the engine, live text,
-/// progress, copy/share and cancel arrive in M1.
+/// Progress + result screen for a transcription job. Reads its job from the
+/// shared `TranscriptionManager` (single source of truth) and shows live text,
+/// progress, the transcription method, and (on completion) copy / share /
+/// discard.
 struct TranscribeView: View {
     let media: LocalMedia
+    @ObservedObject var manager: TranscriptionManager
+    let settings: AppSettings
     @Environment(\.dismiss) private var dismiss
+
+    @State private var started = false
+    @State private var confirmExpensive = false
+
+    private var job: TranscriptJob? { manager.job(media.id) }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Image(systemName: media.isVideo ? "film" : "music.note")
-                    .font(.system(size: 44))
-                    .foregroundStyle(.secondary)
-                Text(media.title)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                Text(media.isVideo ? "影片 · 轉成文字" : "聲音檔 · 轉成文字")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("轉錄引擎將於里程碑 1（on-device whisper.cpp）接上。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-            .padding()
-            .navigationTitle("逐字稿")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("關閉") { dismiss() }
+            content
+                .navigationTitle("逐字稿")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { toolbarContent }
+                .confirmationDialog(
+                    "目前似乎使用行動數據／計費網路，仍要下載語音模型嗎？",
+                    isPresented: $confirmExpensive,
+                    titleVisibility: .visible
+                ) {
+                    Button("仍要下載") { start() }
+                    Button("取消", role: .cancel) { dismiss() }
                 }
+        }
+        .onAppear {
+            startIfNeeded()
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    // MARK: Content
+
+    @ViewBuilder private var content: some View {
+        let job = self.job
+        VStack(alignment: .leading, spacing: 12) {
+            header(job)
+            switch job?.status {
+            case .completed:
+                resultBody(job)
+            case .failed:
+                failedBody(job)
+            default:
+                runningBody(job)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func header(_ job: TranscriptJob?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(media.title).font(.headline).lineLimit(2)
+            if let label = job?.methodLabel {
+                Text("轉譯方式：\(label)").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
+
+    @ViewBuilder private func runningBody(_ job: TranscriptJob?) -> some View {
+        let progress = job?.progress ?? 0
+        VStack(alignment: .leading, spacing: 8) {
+            ProgressView(value: max(0, min(1, progress)))
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(progressText(job)).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        liveText(job)
+    }
+
+    @ViewBuilder private func resultBody(_ job: TranscriptJob?) -> some View {
+        ScrollView {
+            Text(formatted(job?.text ?? ""))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder private func failedBody(_ job: TranscriptJob?) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("轉錄失敗", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            ScrollView {
+                Text(job?.errorMessage ?? "未知錯誤")
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button("重試") { start() }.buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder private func liveText(_ job: TranscriptJob?) -> some View {
+        if let text = job?.text, !text.isEmpty {
+            ScrollView {
+                Text(formatted(text))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Spacer()
+        }
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("關閉") { dismiss() }
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if job?.status == .completed, let text = job?.text, !text.isEmpty {
+                let out = formatted(text)
+                Button { UIPasteboard.general.string = out } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                ShareLink(item: out) { Image(systemName: "square.and.arrow.up") }
+            } else if let job, job.status == .running || job.status == .pending {
+                Button(role: .destructive) {
+                    manager.cancel(job.id)
+                    dismiss()
+                } label: { Text("放棄") }
+            }
+        }
+    }
+
+    // MARK: Logic
+
+    private func startIfNeeded() {
+        guard !started else { return }
+        if let j = job, j.status == .completed { started = true; return }
+        let model = settings.transcribeModel
+        if !WhisperModelManager.isDownloaded(model) && WhisperModelManager.isExpensiveNetwork() {
+            confirmExpensive = true
+            return
+        }
+        start()
+    }
+
+    private func start() {
+        started = true
+        manager.startLocal(media, settings: settings)
+    }
+
+    private func progressText(_ job: TranscriptJob?) -> String {
+        guard let job, job.totalWindows > 0 else { return "準備中…" }
+        return "轉錄中 \(job.completedWindows)/\(job.totalWindows) 段 · \(Int((job.progress) * 100))%"
+    }
+
+    private func formatted(_ raw: String) -> String { TranscriptFormatter.format(raw) }
 }

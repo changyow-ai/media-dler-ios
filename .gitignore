@@ -10,6 +10,10 @@ xcuserdata/
 # Build / diagnostic logs
 *.log
 
+# Vendored on-device engine (whisper.cpp source + built xcframework). Produced
+# by scripts/build-whisper.sh on demand — never committed (large binary).
+Vendor/
+
 # Local Claude Code working dir (scheduled-task locks, etc.)
 .claude/
 

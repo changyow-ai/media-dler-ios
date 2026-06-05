@@ -8,7 +8,7 @@ XCODEPROJ := MediaDler.xcodeproj
 
 .DEFAULT_GOAL := help
 
-.PHONY: help project open test-core clean
+.PHONY: help project open test-core whisper clean
 
 help: ## 顯示可用指令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -24,6 +24,10 @@ open: project ## 產生專案並用 Xcode 開啟（需 macOS + Xcode）
 
 test-core: ## 跑 MediaDlerCore 純邏輯單元測試（不需 Xcode；Linux 亦可）
 	cd MediaDlerCore && swift test
+
+whisper: ## 建置 on-device 轉錄引擎 whisper.xcframework（需 macOS + Xcode；產物不入 git）
+	scripts/build-whisper.sh
+	@echo "完成後請取消 project.yml 內 whisper.xcframework 依賴的註解，再執行 make project。"
 
 clean: ## 刪除產生的專案檔與建置產物
 	rm -rf $(XCODEPROJ) .build DerivedData

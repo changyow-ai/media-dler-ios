@@ -47,7 +47,7 @@ struct HomeView: View {
                 }
             }
             .sheet(item: $model.activeTranscribe) { media in
-                TranscribeView(media: media)
+                TranscribeView(media: media, manager: model.transcription, settings: model.settings.settings)
             }
             .localMediaSheet(
                 $model.pendingLocalMedia,

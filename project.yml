@@ -15,6 +15,16 @@ packages:
   YoutubeDL:
     url: https://github.com/kewlbear/YoutubeDL-iOS
     from: "0.0.2"
+  # Simplified→Taiwan-traditional (s2twp) for the transcription pipeline.
+  # OpenCCConverter is guarded by `#if canImport(OpenCC)`; this dependency
+  # activates it. Phrase-level localisation beats character-level conversion.
+  SwiftyOpenCC:
+    url: https://github.com/ddddxxx/SwiftyOpenCC
+    # v2.0.0-beta is the SPM-native release: it bundles the OpenCC dictionaries
+    # as package resources (Bundle.module) so they ship in the app. The older
+    # stable v1.0.1 expects the dicts in the main bundle and fails at runtime
+    # under SPM. Pinned by revision because `from:` won't select a prerelease.
+    revision: 1d8105a0f7199c90af722bff62728050c858e777
 
 settings:
   base:
@@ -74,7 +84,15 @@ targets:
       - package: MediaDlerCore
       - package: YoutubeDL
         product: YoutubeDL
+      - package: SwiftyOpenCC
+        product: OpenCC
       - target: MediaDlerShare
+      # On-device transcription engine (whisper.cpp). NOT in git — build it
+      # with `make whisper` (scripts/build-whisper.sh) then uncomment this and
+      # re-run `make project`. The engine code is guarded by
+      # `#if canImport(whisper)`, so the app builds fine without it.
+      # - framework: Vendor/whisper.cpp/build-apple/whisper.xcframework
+      #   embed: false
 
   MediaDlerShare:
     type: app-extension
