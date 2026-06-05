@@ -95,7 +95,7 @@ final class SherpaOnnxEngine: TranscriptionEngine {
         )
     }
 
-    private func detectedLanguage(from result: SherpaOnnxOfflineRecognizerResult) -> String? {
+    private func detectedLanguage(from result: SherpaOnnxOfflineRecongitionResult) -> String? {
         // Paraformer is Chinese-only and reports no language → fix to zh so the
         // OpenCC traditional pass always runs.
         if model == .paraformer { return "zh" }
@@ -108,6 +108,15 @@ final class SherpaOnnxEngine: TranscriptionEngine {
 /// Builds the sherpa engine, or returns nil when sherpa isn't compiled in
 /// (the `SHERPA_ONNX_ENABLED` flag is off → vendored libs not wired yet).
 enum SherpaEngineFactory {
+    /// True when the sherpa backend is compiled in (vendored libs + flag).
+    static var isAvailable: Bool {
+        #if SHERPA_ONNX_ENABLED
+        return true
+        #else
+        return false
+        #endif
+    }
+
     static func engine(model: TranscribeModel, modelDir: URL) -> TranscriptionEngine? {
         #if SHERPA_ONNX_ENABLED
         return SherpaOnnxEngine(model: model, modelDir: modelDir)

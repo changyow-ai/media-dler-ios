@@ -1,8 +1,5 @@
 import Foundation
 import MediaDlerCore
-#if canImport(SWCompression)
-import SWCompression
-#endif
 
 /// Describes one sherpa-onnx model: its `.tar.bz2` release asset and the files
 /// the recognizer needs after extraction.
@@ -120,31 +117,15 @@ final class SherpaModelManager: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    /// Decompresses the bzip2 tar and writes the entries flat into `dir`,
-    /// stripping the archive's top-level folder.
+    /// Decompresses the `.tar.bz2` and writes the entries into `dir`, stripping
+    /// the archive's top-level folder. Uses system libbz2 (fast, streaming, low
+    /// memory) via Bz2TarExtractor — only available when sherpa is wired in.
     private func extract(archive: URL, spec: SherpaModelSpec, into dir: URL) async throws {
-        #if canImport(SWCompression)
-        let raw = try Data(contentsOf: archive)
-        let tarData: Data
-        do { tarData = try BZip2.decompress(data: raw) }
-        catch { throw SherpaModelError.extractFailed("bzip2: \(error)") }
-        let entries: [TarEntry]
-        do { entries = try TarContainer.open(container: tarData) }
-        catch { throw SherpaModelError.extractFailed("tar: \(error)") }
-
-        let fm = FileManager.default
-        try? fm.removeItem(at: dir)
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        let prefix = spec.archiveName + "/"
-        for entry in entries {
-            guard entry.info.type == .regular, let data = entry.data else { continue }
-            var name = entry.info.name
-            if name.hasPrefix(prefix) { name = String(name.dropFirst(prefix.count)) }
-            if name.isEmpty { continue }
-            let dest = dir.appendingPathComponent(name)
-            try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: dest)
+        #if SHERPA_ONNX_ENABLED
+        do {
+            try Bz2TarExtractor.extract(archive: archive, into: dir, stripPrefix: spec.archiveName + "/")
+        } catch {
+            throw SherpaModelError.extractFailed("\(error.localizedDescription)")
         }
         #else
         throw SherpaModelError.decompressUnavailable

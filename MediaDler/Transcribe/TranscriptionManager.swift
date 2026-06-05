@@ -151,11 +151,15 @@ final class TranscriptionManager: ObservableObject {
     private func makeEngine(_ plan: EnginePlan) async throws -> TranscriptionEngine {
         switch plan.transcribeEngine {
         case .onDevice where plan.model.backend == .sherpa:
-            let dir = try await SherpaModelManager.shared.ensureDownloaded(plan.model)
-            guard let engine = SherpaEngineFactory.engine(model: plan.model, modelDir: dir) else {
+            // Check the engine is built BEFORE downloading a large model.
+            guard SherpaEngineFactory.isAvailable else {
                 throw TranscribeError.engineUnavailable(
                     "sherpa-onnx 引擎尚未建置。請執行 scripts/fetch-sherpa-libs.sh，並依 project.yml 內的註解加入 sherpa-onnx.xcframework 後重新產生專案。"
                 )
+            }
+            let dir = try await SherpaModelManager.shared.ensureDownloaded(plan.model)
+            guard let engine = SherpaEngineFactory.engine(model: plan.model, modelDir: dir) else {
+                throw TranscribeError.engineUnavailable("sherpa-onnx 引擎建立失敗。")
             }
             return engine
         case .onDevice:
