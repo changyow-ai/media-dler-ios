@@ -33,6 +33,24 @@ public enum AudioFormat: String, Codable, CaseIterable {
     public var ext: String { rawValue }
 }
 
+// MARK: - Transcription (video2text)
+
+/// Which transcription backend to use. On-device whisper.cpp is the default
+/// (offline, private, no key); cloud goes through OpenRouter.
+public enum TranscribeEngine: String, Codable, CaseIterable { case onDevice, cloud }
+
+/// On-device ggml model selection. `base` is the default; `small` is more
+/// accurate but heavier. (M7 may add sherpa-onnx backends.)
+public enum TranscribeModel: String, Codable, CaseIterable { case base, small }
+
+/// User-locked transcription language. `auto` lets the engine detect; an
+/// explicit choice both improves accuracy and (for `zh`) forces the
+/// simplified→traditional conversion even when the engine reports no language
+/// (the OpenRouter AUTO caveat).
+public enum TranscribeLanguage: String, Codable, CaseIterable {
+    case auto, zh, en, ja, ko, es, fr, de
+}
+
 public struct AppSettings: Equatable, Codable {
     public var shareMode: ShareMode
     public var defaultMediaKind: MediaKind
@@ -41,13 +59,28 @@ public struct AppSettings: Equatable, Codable {
     public var downloadAllWhenMultiple: Bool
     public var storageDestination: StorageDestination
 
+    // Transcription (video2text). The API key is NOT stored here — it lives in
+    // the Keychain (KeychainStore) to avoid plaintext in UserDefaults.
+    public var transcribeEngine: TranscribeEngine
+    public var transcribeModel: TranscribeModel
+    public var transcribeLanguage: TranscribeLanguage
+    public var cloudBaseUrl: String
+    public var cloudModel: String
+    public var cloudCompressAudio: Bool
+
     public init(
         shareMode: ShareMode = .ask,
         defaultMediaKind: MediaKind = .video,
         defaultVideoQuality: VideoQuality = .best,
         audioFormat: AudioFormat = .mp3,
         downloadAllWhenMultiple: Bool = true,
-        storageDestination: StorageDestination = .photos
+        storageDestination: StorageDestination = .photos,
+        transcribeEngine: TranscribeEngine = .onDevice,
+        transcribeModel: TranscribeModel = .base,
+        transcribeLanguage: TranscribeLanguage = .auto,
+        cloudBaseUrl: String = "https://openrouter.ai/api/v1",
+        cloudModel: String = "openai/whisper-large-v3-turbo",
+        cloudCompressAudio: Bool = false
     ) {
         self.shareMode = shareMode
         self.defaultMediaKind = defaultMediaKind
@@ -55,6 +88,12 @@ public struct AppSettings: Equatable, Codable {
         self.audioFormat = audioFormat
         self.downloadAllWhenMultiple = downloadAllWhenMultiple
         self.storageDestination = storageDestination
+        self.transcribeEngine = transcribeEngine
+        self.transcribeModel = transcribeModel
+        self.transcribeLanguage = transcribeLanguage
+        self.cloudBaseUrl = cloudBaseUrl
+        self.cloudModel = cloudModel
+        self.cloudCompressAudio = cloudCompressAudio
     }
 
     // Tolerant decoding: settings persisted by older builds won't carry every
@@ -69,5 +108,11 @@ public struct AppSettings: Equatable, Codable {
         audioFormat = try c.decodeIfPresent(AudioFormat.self, forKey: .audioFormat) ?? d.audioFormat
         downloadAllWhenMultiple = try c.decodeIfPresent(Bool.self, forKey: .downloadAllWhenMultiple) ?? d.downloadAllWhenMultiple
         storageDestination = try c.decodeIfPresent(StorageDestination.self, forKey: .storageDestination) ?? d.storageDestination
+        transcribeEngine = try c.decodeIfPresent(TranscribeEngine.self, forKey: .transcribeEngine) ?? d.transcribeEngine
+        transcribeModel = try c.decodeIfPresent(TranscribeModel.self, forKey: .transcribeModel) ?? d.transcribeModel
+        transcribeLanguage = try c.decodeIfPresent(TranscribeLanguage.self, forKey: .transcribeLanguage) ?? d.transcribeLanguage
+        cloudBaseUrl = try c.decodeIfPresent(String.self, forKey: .cloudBaseUrl) ?? d.cloudBaseUrl
+        cloudModel = try c.decodeIfPresent(String.self, forKey: .cloudModel) ?? d.cloudModel
+        cloudCompressAudio = try c.decodeIfPresent(Bool.self, forKey: .cloudCompressAudio) ?? d.cloudCompressAudio
     }
 }
