@@ -5,6 +5,7 @@ struct PickerView: View {
     let item: MediaItem
     let audioFormat: AudioFormat
     let onPick: (FormatSelection) -> Void
+    var onTranscribe: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -13,6 +14,13 @@ struct PickerView: View {
                 if item.isImage {
                     row("下載圖片", "photo", .imageOriginal)
                 } else {
+                    if let onTranscribe {
+                        Section("逐字稿") {
+                            Button { onTranscribe() } label: {
+                                Label("轉成文字", systemImage: "text.bubble")
+                            }
+                        }
+                    }
                     Section("影片") {
                         row("最佳畫質", "film", .bestVideo)
                         ForEach(caps, id: \.self) { h in

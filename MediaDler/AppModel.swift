@@ -76,10 +76,48 @@ final class AppModel: ObservableObject {
         activeTranscribe = media
     }
 
+    /// "轉文字" from the ask-mode picker: download bestaudio for the already
+    /// extracted item, adopt it as a resumable local input, then transcribe via
+    /// the same on-device/cloud pipeline. (Captions/CC shortcut is best-effort
+    /// and currently deferred — YoutubeDL-iOS subtitle support TBD; this always
+    /// falls back to downloading audio.)
+    func transcribeLink(item: MediaItem) {
+        pendingPick = nil
+        Task {
+            banner = "下載音訊中…"
+            do {
+                let file = try await engine.download(item: item, selection: .audio(.m4a))
+                guard let media = LocalMediaInput.adopt(localFile: file, jobKey: item.sourceUrl, title: item.title) else {
+                    banner = "無法準備音訊檔。"
+                    return
+                }
+                banner = nil
+                activeTranscribe = media
+            } catch {
+                banner = error.localizedDescription
+            }
+        }
+    }
+
     func extractAudio(_ media: LocalMedia) {
         pendingLocalMedia = nil
-        // Lossless audio extraction lands in M6.
-        banner = "「取出聲音」將於後續里程碑加入。"
+        Task {
+            do {
+                let m4a = try await AudioTrackExtractor.extract(from: media.url)
+                defer { try? FileManager.default.removeItem(at: m4a) }
+                let saved = DocumentsStorage.save(m4a, preferredName: media.title)
+                // The input copy was only needed for extraction.
+                try? FileManager.default.removeItem(at: media.url)
+                if saved != nil {
+                    banner = "已無損取出聲音，存到「檔案」App 的 media-dler 資料夾。"
+                    TranscriptionRunner.notify(title: "聲音已取出", body: "\(media.title).m4a")
+                } else {
+                    banner = "取出聲音成功，但存檔失敗。"
+                }
+            } catch {
+                banner = error.localizedDescription
+            }
+        }
     }
 
     // MARK: Extraction

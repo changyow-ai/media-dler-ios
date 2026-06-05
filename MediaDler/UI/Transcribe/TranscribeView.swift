@@ -14,6 +14,7 @@ struct TranscribeView: View {
 
     @State private var started = false
     @State private var confirmExpensive = false
+    @State private var savedNote: String?
 
     private var job: TranscriptJob? { manager.job(media.id) }
 
@@ -30,6 +31,11 @@ struct TranscribeView: View {
                 ) {
                     Button("仍要下載") { start() }
                     Button("取消", role: .cancel) { dismiss() }
+                }
+                .alert("已存檔", isPresented: Binding(get: { savedNote != nil }, set: { if !$0 { savedNote = nil } })) {
+                    Button("好", role: .cancel) { savedNote = nil }
+                } message: {
+                    Text(savedNote ?? "")
                 }
         }
         .onAppear {
@@ -126,6 +132,7 @@ struct TranscribeView: View {
                 Button { UIPasteboard.general.string = out } label: {
                     Image(systemName: "doc.on.doc")
                 }
+                Button { saveTxt(out) } label: { Image(systemName: "square.and.arrow.down") }
                 ShareLink(item: out) { Image(systemName: "square.and.arrow.up") }
             } else if let job, job.status == .running || job.status == .pending {
                 Button(role: .destructive) {
@@ -163,4 +170,18 @@ struct TranscribeView: View {
     }
 
     private func formatted(_ raw: String) -> String { TranscriptFormatter.format(raw) }
+
+    /// Saves the formatted transcript as media-dler/<title>.txt (Files app).
+    private func saveTxt(_ text: String) {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("\(media.title).txt")
+        do {
+            try text.data(using: .utf8)?.write(to: tmp)
+            let saved = DocumentsStorage.save(tmp, preferredName: media.title)
+            try? FileManager.default.removeItem(at: tmp)
+            savedNote = saved != nil ? "已存到「檔案」App 的 media-dler 資料夾。" : "存檔失敗。"
+        } catch {
+            savedNote = "存檔失敗：\(error.localizedDescription)"
+        }
+    }
 }
+

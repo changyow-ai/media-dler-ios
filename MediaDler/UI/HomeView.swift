@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var urlText = ""
     @State private var showSettings = false
     @State private var showClearConfirm = false
+    @State private var showTranscripts = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,9 @@ struct HomeView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showTranscripts = true } label: { Image(systemName: "text.bubble") }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 }
             }
@@ -40,11 +44,19 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView(settings: model.settings)
             }
+            .sheet(isPresented: $showTranscripts) {
+                TranscriptHistoryView(manager: model.transcription, settings: model.settings.settings)
+            }
             .sheet(item: $model.pendingPick) { item in
-                PickerView(item: item, audioFormat: model.settings.settings.audioFormat) { selection in
-                    model.submit(item: item, selection: selection)
-                    model.pendingPick = nil
-                }
+                PickerView(
+                    item: item,
+                    audioFormat: model.settings.settings.audioFormat,
+                    onPick: { selection in
+                        model.submit(item: item, selection: selection)
+                        model.pendingPick = nil
+                    },
+                    onTranscribe: { model.transcribeLink(item: item) }
+                )
             }
             .sheet(item: $model.activeTranscribe) { media in
                 TranscribeView(media: media, manager: model.transcription, settings: model.settings.settings)

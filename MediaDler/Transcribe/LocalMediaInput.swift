@@ -56,6 +56,27 @@ enum LocalMediaInput {
         )
     }
 
+    /// Adopts an already-downloaded local file (e.g. yt-dlp bestaudio for a
+    /// shared link) into the resumable input dir. `jobKey` (the source URL)
+    /// derives a stable job id so re-transcribing the same link resumes.
+    static func adopt(localFile url: URL, jobKey: String, title: String) -> LocalMedia? {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: inputDir, withIntermediateDirectories: true)
+        let jobId = "link-" + String(UInt64(bitPattern: Int64(jobKey.hashValue)), radix: 16)
+        let ext = url.pathExtension.isEmpty ? "m4a" : url.pathExtension
+        let dest = inputDir.appendingPathComponent("\(jobId).\(ext)")
+        if fm.fileExists(atPath: dest.path) {
+            try? fm.removeItem(at: url) // already have a copy → drop the new temp
+        } else {
+            do { try fm.moveItem(at: url, to: dest) }
+            catch {
+                MDLog.log("LocalMediaInput.adopt: move failed: \(error)")
+                return nil
+            }
+        }
+        return LocalMedia(id: jobId, url: dest, isVideo: isVideo(ext: ext), title: title)
+    }
+
     /// Stable job id derived from the source path so re-sharing the same file
     /// maps to the same resumable job (mirrors the Android "id from source").
     private static func jobId(for url: URL) -> String {
