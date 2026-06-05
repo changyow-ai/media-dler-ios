@@ -16,8 +16,10 @@
 > 尚需「真機 / 網路 / 金鑰」才能驗證的執行期行為見下。
 
 - **M0 ✅ 完整驗證**：`MediaDlerCore/Transcribe/`（WindowPlanner / SegmentMerge / LanguageDecision / SubtitleVtt / TranscriptFormatter / Transcript / TranscriptionEngine）+ 32 個 XCTest；`Settings` 擴充；`project.yml` `CFBundleDocumentTypes`；`onOpenURL` 分流；`LocalMediaInput` 收檔複製；`LocalMediaSheet` + `TranscribeView` 串通。
-- **M1 ✅ 程式完成（待真機）**：`AudioToPCM`（AVAssetReader decodeRange）、`WhisperModelManager`（HF 下載 + NWPath Wi-Fi gate）、`LibWhisper`/`WhisperCppEngine`（**`#if canImport(whisper)` 守護**）、`KeychainStore`、`TranscriptJob/Store/Manager/Runner`（checkpoint/resume + beginBackgroundTask + 通知 + 引擎切換防呆）。
-  - ⚠️ **whisper 引擎決策（與 codex 討論結論）**：走 **vendored `whisper.xcframework`**（`build-xcframework.sh`），**非 SwiftPM**（master 已無可用 Package.swift）。產物不入 git → `make whisper`（`scripts/build-whisper.sh`）建置後，**取消 `project.yml` 內 whisper.xcframework 依賴註解**再 `make project`。引擎碼以 `canImport(whisper)` 守護，未建置時 app 照常編譯、裝置端轉錄會回報「請先建置引擎」。
+- **M1 ✅ 程式完成＋模擬器實測通過**：`AudioToPCM`（AVAssetReader decodeRange）、`WhisperModelManager`（HF 下載 + NWPath Wi-Fi gate）、`LibWhisper`/`WhisperCppEngine`（**`#if canImport(whisper)` 守護**）、`KeychainStore`、`TranscriptJob/Store/Manager/Runner`（checkpoint/resume + beginBackgroundTask + 通知 + 引擎切換防呆）。
+  - ⚠️ **whisper 引擎決策（與 codex 討論結論）**：走 **vendored `whisper.xcframework`**（`build-xcframework.sh`），**非 SwiftPM**（master 已無可用 Package.swift）。產物不入 git → `make whisper`（`scripts/build-whisper.sh`）建置後，**取消 `project.yml` 內 whisper.xcframework 與 CoreML.framework 兩行的註解**（兩者要一起取消：xcframework 含 Core ML encoder，需 link CoreML 否則連結缺符號）再 `make project`。引擎碼以 `canImport(whisper)` 守護，未建置時 app 照常編譯、裝置端轉錄會回報「請先建置引擎」。
+  - ✅ **模擬器實測（iPhone 17，2026-06-05）**：實建 whisper.xcframework→啟用→下載 ggml-base(147MB)→對 whisper.cpp 內附 `jfk.wav` 真實辨識：**鎖定語言=en 輸出完全正確**（"And so my fellow Americans, ask not what your country can do for you…"）。AUTO 時 base 把該英語片段誤判成 zh（輸出中文）→ 實證「語言誤判需鎖定主語言」caveat。模型下載/載入/推論/分窗/SegmentMerge/OpenCC/狀態機/持久化全鏈路驗證通過。
+  - 🐞 **實測抓到並修復的 bug**：jobId 原用 Swift `hashValue`（每 process 隨機 seed）→ 同來源跨 app 重啟得到不同 id → **殺 app 重啟無法續跑**。改用穩定 FNV-1a（`LocalMediaInput.stableHash`），實測同來源跨啟動得到相同 id。
 - **M3 ✅ 程式完成（待金鑰/網路）**：`CloudTranscriptionEngine`（OpenRouter JSON+base64）+ `WavEncoder`；引擎切換（`EnginePlan`：裝置端 60s/3s、雲端 WAV 5min）；設定頁三欄 + 壓縮開關 + 金鑰存 Keychain。**雲端路徑不需 xcframework，simulator+金鑰即可端到端跑。**
 - **M4 ✅**：結果頁「存成 .txt」→ `DocumentsStorage`。
 - **M5 ✅**：`TranscriptFormatter` 顯示斷句（已測）；`methodLabel` 顯示轉譯方式；歷史頁。

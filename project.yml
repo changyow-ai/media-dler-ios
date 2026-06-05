@@ -88,11 +88,16 @@ targets:
         product: OpenCC
       - target: MediaDlerShare
       # On-device transcription engine (whisper.cpp). NOT in git — build it
-      # with `make whisper` (scripts/build-whisper.sh) then uncomment this and
-      # re-run `make project`. The engine code is guarded by
+      # with `make whisper` (scripts/build-whisper.sh), then UNCOMMENT BOTH lines
+      # below and re-run `make project`. The engine code is guarded by
       # `#if canImport(whisper)`, so the app builds fine without it.
+      # CoreML must be linked too: the xcframework is built with Core ML encoder
+      # support whose objects reference MLModel/… but its module map doesn't link
+      # CoreML (verified on simulator — link error without it; whisper falls back
+      # to CPU at runtime when no .mlmodelc is present).
       # - framework: Vendor/whisper.cpp/build-apple/whisper.xcframework
       #   embed: false
+      # - sdk: CoreML.framework
 
   MediaDlerShare:
     type: app-extension

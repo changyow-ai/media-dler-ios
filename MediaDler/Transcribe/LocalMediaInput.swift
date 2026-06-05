@@ -62,7 +62,7 @@ enum LocalMediaInput {
     static func adopt(localFile url: URL, jobKey: String, title: String) -> LocalMedia? {
         let fm = FileManager.default
         try? fm.createDirectory(at: inputDir, withIntermediateDirectories: true)
-        let jobId = "link-" + String(UInt64(bitPattern: Int64(jobKey.hashValue)), radix: 16)
+        let jobId = "link-" + stableHash(jobKey)
         let ext = url.pathExtension.isEmpty ? "m4a" : url.pathExtension
         let dest = inputDir.appendingPathComponent("\(jobId).\(ext)")
         if fm.fileExists(atPath: dest.path) {
@@ -80,8 +80,20 @@ enum LocalMediaInput {
     /// Stable job id derived from the source path so re-sharing the same file
     /// maps to the same resumable job (mirrors the Android "id from source").
     private static func jobId(for url: URL) -> String {
-        let key = url.standardizedFileURL.path
-        return "local-" + String(UInt64(bitPattern: Int64(key.hashValue)), radix: 16)
+        return "local-" + stableHash(url.standardizedFileURL.path)
+    }
+
+    /// Deterministic FNV-1a 64-bit hex digest. Swift's `String.hashValue` is
+    /// seeded per process, so it would give the SAME source a DIFFERENT id on
+    /// each launch — breaking resume after the app is killed/relaunched. This
+    /// is stable across processes.
+    static func stableHash(_ s: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in s.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return String(hash, radix: 16)
     }
 
     /// True for video containers; false for audio-only. Uses UTType so it works
