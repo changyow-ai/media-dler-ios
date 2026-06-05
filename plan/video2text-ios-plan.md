@@ -25,10 +25,11 @@
 - **M5 ✅**：`TranscriptFormatter` 顯示斷句（已測）；`methodLabel` 顯示轉譯方式；歷史頁。
 - **M6 ✅ 程式完成（待真機）**：`AudioTrackExtractor`（AVAssetExportSession passthrough 無損 → .m4a）。
 - **M2 ⚠️ 部分**：ask-mode picker 加「轉成文字」→ 下載 bestaudio → 收編為 LocalMedia 走同一 pipeline。**YouTube CC 捷徑暫緩**（`SubtitleVtt` 已在 core 備好；YoutubeDL-iOS 字幕能力待確認，目前一律 fallback 下載音訊）。
-- **M7 ✅ scaffold 完成（待 fetch libs + 真跑）**：sherpa-onnx 第二裝置端後端。`TranscribeModel` 加 `backend`（whisperCpp/sherpa）+ turboQ5/senseVoice/paraformer/qwen3；`SherpaModelManager`（tar.bz2 下載 + SWCompression 端上解壓）；`SherpaOnnxEngine`+factory；`TranscriptionManager` 依 backend 分流；SettingsView 列 6 模型+後端感知狀態。
-  - ⚠️ **整合決策（與 codex 討論）**：vendored `sherpa-onnx.xcframework`（v1.13.2）+ `onnxruntime.xcframework`（v1.17.1）+ vendored `SherpaOnnx.swift` + **bridging header**（非 Swift module）。因走 bridging header，**用自訂 compile flag `SHERPA_ONNX_ENABLED` 守護（不是 canImport）**。`make sherpa`（`scripts/fetch-sherpa-libs.sh`）取得後，依 project.yml 註解取消 framework + 加 sources(SherpaOnnx.swift) + settings(SHERPA_ONNX_ENABLED / SWIFT_OBJC_BRIDGING_HEADER / -lc++) 再 `make project`。
-  - tar.bz2 解壓用 **SWCompression 4.7.0**（+ BitByteData 2.0.2，皆釘版：4.8.5+/2.0.3+ 需 iOS 17）。
-  - **未驗**：fetch libs + 啟用 flag 後實際編譯（SherpaOnnx.swift wrapper 簽名隨版本可能微調）、模型下載解壓、實際辨識、各模型檔名確認、Qwen3 OOM。
+- **M7 ✅ 程式完成＋模擬器實跑驗證（SenseVoice）**：sherpa-onnx 第二裝置端後端。`TranscribeModel` 加 `backend`（whisperCpp/sherpa）+ turboQ5/senseVoice/paraformer/qwen3；`SherpaModelManager`（tar.bz2 下載 + 解壓）；`SherpaOnnxEngine`+factory；`TranscriptionManager` 依 backend 分流（且**下載前先確認引擎可用**）；SettingsView 列 6 模型+後端感知狀態。
+  - ⚠️ **整合決策（與 codex 討論）**：vendored `sherpa-onnx.xcframework`（v1.13.2）+ `onnxruntime.xcframework`（v1.17.1）+ vendored `SherpaOnnx.swift` + **bridging header**（非 Swift module）。因走 bridging header，**用自訂 compile flag `SHERPA_ONNX_ENABLED` 守護（不是 canImport）**。`make sherpa`（`scripts/fetch-sherpa-libs.sh`）取得後，依 project.yml 註解取消 framework + 加 sources(SherpaOnnx.swift) + settings(SHERPA_ONNX_ENABLED / `SWIFT_OBJC_BRIDGING_HEADER=MediaDler/Transcribe/Sherpa-Bridging-Header.h` / `-lc++ -lbz2`) 再 `make project`。
+  - **tar.bz2 解壓改用系統 libbz2**（`Bz2TarExtractor`，串流到磁碟 + 手動 untar）—— SWCompression 純 Swift bzip2 解 163MB 跑 >10 分鐘太慢、真機恐 OOM，已移除（連同 BitByteData，省去 iOS17 釘版）。iOS SDK 有 `bzlib.h`+`libbz2.tbd`，bridging header `#import <bzlib.h>` + link `-lbz2`。
+  - ✅ **模擬器實測（iPhone 17，2026-06-05）**：建 xcframework→啟用 flag→下載 SenseVoice(163MB)→libbz2 解壓→真實辨識：英文 jfk.wav 正確（AUTO 判 en，whisper base 卻誤判 zh → 印證 SenseVoice 較準）；內附 zh.wav 正確且**正體有標點**「開放時間早上9點至下午5點。」（OpenCC s2twp 生效）。SenseVoice 檔名確認：`model.int8.onnx`+`tokens.txt`。
+  - **未驗**：Paraformer/Qwen3 實跑（Qwen3 預期高階機/OOM）、真機。SherpaOnnx.swift wrapper 的 result type 名稱有 typo `SherpaOnnxOfflineRecongitionResult`（已對齊）。
 - **取捨/簡化（誠實記錄）**：雲端用一般 `URLSession`（非 background session）；whisper 即時文字為「逐窗回報」而非 intra-window C callback 串流；未註冊 `BGProcessingTaskRequest`（前景+寬限+checkpoint 已覆蓋多數情境）；base64 直接組（窗已上限 5min，未做 3-byte 串流寫出）。以上皆為可後續強化的 refinement。
 
 ---
