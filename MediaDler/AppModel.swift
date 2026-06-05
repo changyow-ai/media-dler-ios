@@ -14,6 +14,12 @@ final class AppModel: ObservableObject {
     @Published var pendingPick: MediaItem?
     @Published var engineVersion: String?
 
+    // Transcription (video2text). `pendingLocalMedia` drives the action menu
+    // shown after a local file is shared in; `activeTranscribe` presents the
+    // result/progress screen once the user picks 「轉成文字」.
+    @Published var pendingLocalMedia: LocalMedia?
+    @Published var activeTranscribe: LocalMedia?
+
     private enum JobKind {
         case engine(FormatSelection)
         case directToPhotos
@@ -48,6 +54,30 @@ final class AppModel: ObservableObject {
               components.scheme == "mediadler" else { return }
         let urlParam = components.queryItems?.first(where: { $0.name == "url" })?.value
         handle(text: urlParam)
+    }
+
+    // MARK: Transcription routing
+
+    /// A local video/audio file was shared in via CFBundleDocumentTypes. Copy
+    /// it into private storage (resumable source) and show the action menu.
+    func handle(localFile url: URL) {
+        MDLog.log("AppModel.handle(localFile:) \(url.lastPathComponent)")
+        guard let media = LocalMediaInput.importFile(url) else {
+            banner = "無法讀取分享進來的檔案。"
+            return
+        }
+        pendingLocalMedia = media
+    }
+
+    func transcribeLocal(_ media: LocalMedia) {
+        pendingLocalMedia = nil
+        activeTranscribe = media
+    }
+
+    func extractAudio(_ media: LocalMedia) {
+        pendingLocalMedia = nil
+        // Lossless audio extraction lands in M6.
+        banner = "「取出聲音」將於後續里程碑加入。"
     }
 
     // MARK: Extraction

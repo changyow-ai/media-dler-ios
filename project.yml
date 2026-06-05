@@ -46,6 +46,20 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSPhotoLibraryAddUsageDescription: 儲存下載的影片到你的相簿。
+        # Lets users share a local video/audio file INTO media-dler ("Copy to
+        # media-dler" / Open With). The system copies the file into our
+        # container and launches us with a file:// URL — this is how local-file
+        # transcription gets its input without a Share Extension (which has a
+        # ~120MB memory cap) or App Groups (unavailable on free signing).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio/Video
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.movie
+              - public.audio
+              - public.mpeg-4
+              - public.mp3
+              - com.apple.m4a-audio
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         CFBundleURLTypes:

@@ -46,6 +46,14 @@ struct HomeView: View {
                     model.pendingPick = nil
                 }
             }
+            .sheet(item: $model.activeTranscribe) { media in
+                TranscribeView(media: media)
+            }
+            .localMediaSheet(
+                $model.pendingLocalMedia,
+                onTranscribe: { model.transcribeLocal($0) },
+                onExtractAudio: { model.extractAudio($0) }
+            )
             .overlay { if model.isExtracting { extractingOverlay } }
             .alert("提示", isPresented: bannerBinding) {
                 Button("好", role: .cancel) { model.banner = nil }

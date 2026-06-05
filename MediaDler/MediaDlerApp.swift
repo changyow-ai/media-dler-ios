@@ -9,7 +9,15 @@ struct MediaDlerApp: App {
             HomeView()
                 .environmentObject(model)
                 .onAppear { model.start() }
-                .onOpenURL { model.handle(deepLink: $0) }
+                .onOpenURL { url in
+                    // Local file shared in via CFBundleDocumentTypes → transcribe
+                    // path; mediadler:// deep-link → existing URL download path.
+                    if url.isFileURL {
+                        model.handle(localFile: url)
+                    } else {
+                        model.handle(deepLink: url)
+                    }
+                }
         }
     }
 }
