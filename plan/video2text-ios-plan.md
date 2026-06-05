@@ -25,7 +25,10 @@
 - **M5 ✅**：`TranscriptFormatter` 顯示斷句（已測）；`methodLabel` 顯示轉譯方式；歷史頁。
 - **M6 ✅ 程式完成（待真機）**：`AudioTrackExtractor`（AVAssetExportSession passthrough 無損 → .m4a）。
 - **M2 ⚠️ 部分**：ask-mode picker 加「轉成文字」→ 下載 bestaudio → 收編為 LocalMedia 走同一 pipeline。**YouTube CC 捷徑暫緩**（`SubtitleVtt` 已在 core 備好；YoutubeDL-iOS 字幕能力待確認，目前一律 fallback 下載音訊）。
-- **M7 ⬜ 未做**：sherpa-onnx 第二後端（選配/高階機，依計劃「先跑通 whisper.cpp」暫緩）。
+- **M7 ✅ scaffold 完成（待 fetch libs + 真跑）**：sherpa-onnx 第二裝置端後端。`TranscribeModel` 加 `backend`（whisperCpp/sherpa）+ turboQ5/senseVoice/paraformer/qwen3；`SherpaModelManager`（tar.bz2 下載 + SWCompression 端上解壓）；`SherpaOnnxEngine`+factory；`TranscriptionManager` 依 backend 分流；SettingsView 列 6 模型+後端感知狀態。
+  - ⚠️ **整合決策（與 codex 討論）**：vendored `sherpa-onnx.xcframework`（v1.13.2）+ `onnxruntime.xcframework`（v1.17.1）+ vendored `SherpaOnnx.swift` + **bridging header**（非 Swift module）。因走 bridging header，**用自訂 compile flag `SHERPA_ONNX_ENABLED` 守護（不是 canImport）**。`make sherpa`（`scripts/fetch-sherpa-libs.sh`）取得後，依 project.yml 註解取消 framework + 加 sources(SherpaOnnx.swift) + settings(SHERPA_ONNX_ENABLED / SWIFT_OBJC_BRIDGING_HEADER / -lc++) 再 `make project`。
+  - tar.bz2 解壓用 **SWCompression 4.7.0**（+ BitByteData 2.0.2，皆釘版：4.8.5+/2.0.3+ 需 iOS 17）。
+  - **未驗**：fetch libs + 啟用 flag 後實際編譯（SherpaOnnx.swift wrapper 簽名隨版本可能微調）、模型下載解壓、實際辨識、各模型檔名確認、Qwen3 OOM。
 - **取捨/簡化（誠實記錄）**：雲端用一般 `URLSession`（非 background session）；whisper 即時文字為「逐窗回報」而非 intra-window C callback 串流；未註冊 `BGProcessingTaskRequest`（前景+寬限+checkpoint 已覆蓋多數情境）；base64 直接組（窗已上限 5min，未做 3-byte 串流寫出）。以上皆為可後續強化的 refinement。
 
 ---
