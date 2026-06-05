@@ -22,9 +22,12 @@ struct SherpaModelSpec {
                 requiredFiles: ["model.int8.onnx", "tokens.txt"]
             )
         case .qwen3:
+            // Must match every file SherpaOnnxEngine.makeConfig opens for qwen3
+            // (conv-frontend + encoder + decoder + tokens), so isDownloaded()
+            // can't report ready while the recognizer would fail to load.
             return SherpaModelSpec(
                 archiveName: "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25",
-                requiredFiles: ["encoder.int8.onnx", "decoder.int8.onnx"]
+                requiredFiles: ["conv-frontend.onnx", "encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"]
             )
         case .base, .small, .turboQ5:
             return nil // whisper.cpp models
@@ -45,7 +48,7 @@ enum SherpaModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSherpaModel: return "這不是 sherpa 模型。"
-        case .decompressUnavailable: return "缺少 tar.bz2 解壓元件（SWCompression）。"
+        case .decompressUnavailable: return "tar.bz2 解壓需要 sherpa 元件（libbz2，尚未建置）。請先執行 scripts/fetch-sherpa-libs.sh。"
         case .extractFailed(let why): return "模型解壓失敗：\(why)"
         case .missingFiles(let f): return "模型檔不完整，缺少：\(f.joined(separator: ", "))"
         }

@@ -13,7 +13,6 @@ final class WhisperModelManager: NSObject, ObservableObject {
     @Published private(set) var progress: Double = 0
 
     private var continuation: CheckedContinuation<URL, Error>?
-    private var downloadingModel: TranscribeModel?
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
 
     // MARK: Model catalog
@@ -45,20 +44,31 @@ final class WhisperModelManager: NSObject, ObservableObject {
     }
 
     /// True when the current network path is cellular/metered — the UI should
-    /// confirm before a large model download.
-    static func isExpensiveNetwork() -> Bool {
+    /// confirm before a large model download. Async so it never blocks the
+    /// caller's thread (the old semaphore version stalled the main actor up to
+    /// 1s on every transcribe-screen open).
+    static func isExpensiveNetwork() async -> Bool {
+        final class Box: @unchecked Sendable { var resumed = false; let lock = NSLock() }
+        let box = Box()
         let monitor = NWPathMonitor()
-        let sem = DispatchSemaphore(value: 0)
-        var expensive = false
-        monitor.pathUpdateHandler = { path in
-            expensive = path.isExpensive || path.usesInterfaceType(.cellular)
-            sem.signal()
-        }
         let queue = DispatchQueue(label: "whisper.netcheck")
-        monitor.start(queue: queue)
-        _ = sem.wait(timeout: .now() + 1.0)
-        monitor.cancel()
-        return expensive
+        return await withCheckedContinuation { cont in
+            // pathUpdateHandler and the timeout both run on `queue` (serial), but
+            // guard the single resume anyway in case of overlap.
+            func finish(_ expensive: Bool) {
+                box.lock.lock(); defer { box.lock.unlock() }
+                guard !box.resumed else { return }
+                box.resumed = true
+                monitor.cancel()
+                cont.resume(returning: expensive)
+            }
+            monitor.pathUpdateHandler = { path in
+                finish(path.isExpensive || path.usesInterfaceType(.cellular))
+            }
+            monitor.start(queue: queue)
+            // Fallback: assume not-expensive if no path update lands in 1s.
+            queue.asyncAfter(deadline: .now() + 1.0) { finish(false) }
+        }
     }
 
     // MARK: Download / delete
@@ -75,9 +85,8 @@ final class WhisperModelManager: NSObject, ObservableObject {
         try? FileManager.default.createDirectory(at: Self.modelsDir, withIntermediateDirectories: true)
 
         activeDownload = model
-        downloadingModel = model
         progress = 0
-        defer { activeDownload = nil; downloadingModel = nil }
+        defer { activeDownload = nil }
 
         let temp: URL = try await withCheckedThrowingContinuation { cont in
             self.continuation = cont

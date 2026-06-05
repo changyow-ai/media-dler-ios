@@ -57,7 +57,7 @@ final class TranscriptionManager: ObservableObject {
                 model: settings.transcribeModel,
                 knownLanguage: settings.transcribeLanguage,
                 engineId: "openrouter-\(settings.cloudModel)",
-                method: .cloud(model: settings.cloudModel, format: settings.cloudCompressAudio ? "m4a" : "WAV"),
+                method: .cloud(model: settings.cloudModel, format: "WAV"),
                 windowMs: 300_000, overlapMs: 3_000,
                 baseUrl: settings.cloudBaseUrl, cloudModel: settings.cloudModel
             )

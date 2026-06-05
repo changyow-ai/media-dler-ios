@@ -2,9 +2,9 @@ import Foundation
 
 /// Encodes 16kHz mono Float32 PCM into a standard 16-bit PCM WAV container for
 /// the cloud (OpenRouter) `input_audio` payload (`format: "wav"`). WAV is the
-/// default cloud format — lossless and well-supported by every model; the
-/// optional AAC/m4a path (AudioEncoder) is only for bandwidth, never cost
-/// (OpenRouter bills by audio duration, not bytes).
+/// only cloud upload format — lossless and well-supported by every model.
+/// OpenRouter bills by audio duration (not bytes), so compressing the upload
+/// would only save bandwidth, never cost; it's deliberately not implemented.
 enum WavEncoder {
     static func encode(pcm: [Float], sampleRate: Int = 16000) -> Data {
         let channels = 1

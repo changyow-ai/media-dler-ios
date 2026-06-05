@@ -39,7 +39,7 @@ struct TranscribeView: View {
                 }
         }
         .onAppear {
-            startIfNeeded()
+            Task { await startIfNeeded() }
             UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -56,6 +56,8 @@ struct TranscribeView: View {
                 resultBody(job)
             case .failed:
                 failedBody(job)
+            case .canceled:
+                canceledBody()
             default:
                 runningBody(job)
             }
@@ -90,6 +92,17 @@ struct TranscribeView: View {
             Text(formatted(job?.text ?? ""))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder private func canceledBody() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("已取消", systemImage: "xmark.circle")
+                .foregroundStyle(.secondary)
+            Text("這個逐字稿工作已取消，原始輸入檔已清除。請重新分享檔案再轉一次。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
         }
     }
 
@@ -145,9 +158,15 @@ struct TranscribeView: View {
 
     // MARK: Logic
 
-    private func startIfNeeded() {
+    private func startIfNeeded() async {
         guard !started else { return }
-        if let j = job, j.status == .completed { started = true; return }
+        // Terminal jobs never auto-run: completed shows its stored text;
+        // canceled already deleted its private input copy on cancel, so it can't
+        // resume — the user must re-share the file to transcribe again.
+        if let j = job, j.status == .completed || j.status == .canceled {
+            started = true
+            return
+        }
         // Only the on-device engine downloads a model — gate that on Wi-Fi.
         // The download-state check MUST be backend-aware: WhisperModelManager
         // traps (preconditionFailure) on sherpa models, so route each backend
@@ -157,7 +176,7 @@ struct TranscribeView: View {
             let downloaded = model.backend == .sherpa
                 ? SherpaModelManager.isDownloaded(model)
                 : WhisperModelManager.isDownloaded(model)
-            if !downloaded && WhisperModelManager.isExpensiveNetwork() {
+            if !downloaded && await WhisperModelManager.isExpensiveNetwork() {
                 confirmExpensive = true
                 return
             }

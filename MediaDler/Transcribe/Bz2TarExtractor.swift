@@ -64,7 +64,7 @@ enum Bz2TarExtractor {
                 let base = UnsafeMutablePointer(mutating: raw.bindMemory(to: CChar.self).baseAddress)
                 stream.next_in = base
                 stream.avail_in = UInt32(chunk.count)
-                while stream.avail_in > 0 {
+                repeat {
                     var produced = 0
                     let ret: Int32 = outBuf.withUnsafeMutableBufferPointer { ob -> Int32 in
                         stream.next_out = ob.baseAddress
@@ -74,11 +74,15 @@ enum Bz2TarExtractor {
                         return r
                     }
                     if produced > 0 {
-                        output.write(Data(bytes: outBuf, count: produced))
+                        try output.write(contentsOf: Data(bytes: outBuf, count: produced))
                     }
                     if ret == BZ_STREAM_END { finished = true; break }
                     guard ret == BZ_OK else { throw Bz2TarError.bz2Decompress(ret) }
-                }
+                    // Keep decompressing while input remains OR the output buffer
+                    // filled exactly (more decoded bytes are still pending). The
+                    // old `while avail_in > 0` exited on the final chunk when
+                    // input drained mid-flush, silently truncating the tar.
+                } while stream.avail_in > 0 || stream.avail_out == 0
             }
         }
     }
@@ -115,15 +119,15 @@ enum Bz2TarExtractor {
                     try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
                     fm.createFile(atPath: dest.path, contents: nil)
                     let out = try FileHandle(forWritingTo: dest)
+                    defer { try? out.close() }
                     var remaining = size
                     while remaining > 0 {
                         let n = min(remaining, 1 << 20)
                         let data = handle.readData(ofLength: n)
                         if data.isEmpty { break }
-                        out.write(data)
+                        try out.write(contentsOf: data)
                         remaining -= data.count
                     }
-                    try? out.close()
                     // Skip padding to the next 512 boundary.
                     if padded > size { _ = handle.readData(ofLength: padded - size) }
                 } else {

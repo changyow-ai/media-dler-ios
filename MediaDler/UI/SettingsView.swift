@@ -112,8 +112,7 @@ struct SettingsView: View {
                 SecureField("API 金鑰（存 Keychain）", text: $apiKey)
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
                     .onChange(of: apiKey) { newValue in KeychainStore.saveApiKey(newValue) }
-                Toggle("壓縮音訊上傳（m4a）", isOn: $settings.settings.cloudCompressAudio)
-                Text("OpenRouter 按音訊「時長」計費，與格式／大小無關 → 壓縮省頻寬不省錢，預設用 WAV（品質較佳、分短窗）。推薦 model：openai/whisper-large-v3-turbo（$0.04/hr）。金鑰只存本機 Keychain，不寫進設定檔、不進原始碼／IPA。")
+                Text("OpenRouter 按音訊「時長」計費，與格式／大小無關，因此一律以 WAV 上傳（品質較佳、分短窗）。推薦 model：openai/whisper-large-v3-turbo（$0.04/hr）。金鑰只存本機 Keychain，不寫進設定檔、不進原始碼／IPA。")
                     .font(.footnote).foregroundStyle(.secondary)
                 if apiKey.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text("尚未設定金鑰，雲端轉錄會失敗。")

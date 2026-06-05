@@ -93,7 +93,6 @@ public struct AppSettings: Equatable, Codable {
     public var transcribeLanguage: TranscribeLanguage
     public var cloudBaseUrl: String
     public var cloudModel: String
-    public var cloudCompressAudio: Bool
 
     public init(
         shareMode: ShareMode = .ask,
@@ -106,8 +105,7 @@ public struct AppSettings: Equatable, Codable {
         transcribeModel: TranscribeModel = .base,
         transcribeLanguage: TranscribeLanguage = .auto,
         cloudBaseUrl: String = "https://openrouter.ai/api/v1",
-        cloudModel: String = "openai/whisper-large-v3-turbo",
-        cloudCompressAudio: Bool = false
+        cloudModel: String = "openai/whisper-large-v3-turbo"
     ) {
         self.shareMode = shareMode
         self.defaultMediaKind = defaultMediaKind
@@ -120,7 +118,6 @@ public struct AppSettings: Equatable, Codable {
         self.transcribeLanguage = transcribeLanguage
         self.cloudBaseUrl = cloudBaseUrl
         self.cloudModel = cloudModel
-        self.cloudCompressAudio = cloudCompressAudio
     }
 
     // Tolerant decoding: settings persisted by older builds won't carry every
@@ -140,6 +137,5 @@ public struct AppSettings: Equatable, Codable {
         transcribeLanguage = try c.decodeIfPresent(TranscribeLanguage.self, forKey: .transcribeLanguage) ?? d.transcribeLanguage
         cloudBaseUrl = try c.decodeIfPresent(String.self, forKey: .cloudBaseUrl) ?? d.cloudBaseUrl
         cloudModel = try c.decodeIfPresent(String.self, forKey: .cloudModel) ?? d.cloudModel
-        cloudCompressAudio = try c.decodeIfPresent(Bool.self, forKey: .cloudCompressAudio) ?? d.cloudCompressAudio
     }
 }
