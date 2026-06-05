@@ -141,10 +141,13 @@ struct TranscribeView: View {
     private func startIfNeeded() {
         guard !started else { return }
         if let j = job, j.status == .completed { started = true; return }
-        let model = settings.transcribeModel
-        if !WhisperModelManager.isDownloaded(model) && WhisperModelManager.isExpensiveNetwork() {
-            confirmExpensive = true
-            return
+        // Only the on-device engine downloads a model — gate that on Wi-Fi.
+        if settings.transcribeEngine == .onDevice {
+            let model = settings.transcribeModel
+            if !WhisperModelManager.isDownloaded(model) && WhisperModelManager.isExpensiveNetwork() {
+                confirmExpensive = true
+                return
+            }
         }
         start()
     }

@@ -17,9 +17,45 @@ final class TranscriptionManager: ObservableObject {
     private let runner = TranscriptionRunner()
     private var task: Task<Void, Never>?
 
-    // On-device window config — also the checkpoint unit (60s + 3s overlap).
-    private let windowMs: Int64 = 60_000
-    private let overlapMs: Int64 = 3_000
+    /// Resolved engine choice + window config for one run.
+    private struct EnginePlan {
+        let transcribeEngine: TranscribeEngine
+        let model: TranscribeModel
+        let knownLanguage: TranscribeLanguage
+        let engineId: String
+        let method: TranscribeMethod
+        let windowMs: Int64
+        let overlapMs: Int64
+        let baseUrl: String
+        let cloudModel: String
+    }
+
+    private func plan(for settings: AppSettings) -> EnginePlan {
+        switch settings.transcribeEngine {
+        case .onDevice:
+            // 60s window + 3s overlap, also the checkpoint unit.
+            return EnginePlan(
+                transcribeEngine: .onDevice,
+                model: settings.transcribeModel,
+                knownLanguage: settings.transcribeLanguage,
+                engineId: "whispercpp-\(settings.transcribeModel.rawValue)",
+                method: .onDevice(model: settings.transcribeModel.rawValue),
+                windowMs: 60_000, overlapMs: 3_000,
+                baseUrl: settings.cloudBaseUrl, cloudModel: settings.cloudModel
+            )
+        case .cloud:
+            // Hard cap WAV 5min (upstream ~60s timeout + base64 inflation).
+            return EnginePlan(
+                transcribeEngine: .cloud,
+                model: settings.transcribeModel,
+                knownLanguage: settings.transcribeLanguage,
+                engineId: "openrouter-\(settings.cloudModel)",
+                method: .cloud(model: settings.cloudModel, format: settings.cloudCompressAudio ? "m4a" : "WAV"),
+                windowMs: 300_000, overlapMs: 3_000,
+                baseUrl: settings.cloudBaseUrl, cloudModel: settings.cloudModel
+            )
+        }
+    }
 
     init() {
         jobs = TranscriptStore.load()
@@ -42,8 +78,9 @@ final class TranscriptionManager: ObservableObject {
     @discardableResult
     func startLocal(_ media: LocalMedia, settings: AppSettings) -> String {
         let jobId = media.id
-        let engineId = "whispercpp-\(settings.transcribeModel.rawValue)"
-        let method = TranscribeMethod.onDevice(model: settings.transcribeModel.rawValue)
+        let plan = plan(for: settings)
+        let engineId = plan.engineId
+        let method = plan.method
 
         if let existing = job(jobId) {
             if existing.status == .completed { return jobId }
@@ -78,7 +115,7 @@ final class TranscriptionManager: ObservableObject {
                 durationMs: 0
             ))
         }
-        run(jobId: jobId, model: settings.transcribeModel, knownLanguage: settings.transcribeLanguage)
+        run(jobId: jobId, plan: plan)
         return jobId
     }
 
@@ -98,29 +135,41 @@ final class TranscriptionManager: ObservableObject {
 
     // MARK: Pipeline
 
-    private func run(jobId: String, model: TranscribeModel, knownLanguage: TranscribeLanguage) {
+    private func run(jobId: String, plan: EnginePlan) {
         task?.cancel()
         runner.beginGrace(name: "transcribe-\(jobId)")
         task = Task { [weak self] in
-            await self?.pipeline(jobId: jobId, model: model, knownLanguage: knownLanguage)
+            await self?.pipeline(jobId: jobId, plan: plan)
             self?.runner.endGrace()
         }
     }
 
-    private func pipeline(jobId: String, model: TranscribeModel, knownLanguage: TranscribeLanguage) async {
-        guard case .localFile(let path)? = job(jobId)?.source else { return }
-        let url = URL(fileURLWithPath: path)
-        update(jobId) { $0.status = .running }
-        do {
-            let modelPath = try await WhisperModelManager.shared.ensureDownloaded(model).path
-            guard let engine = TranscriptionEngineFactory.onDeviceEngine(model: model, modelPath: modelPath) else {
+    private func makeEngine(_ plan: EnginePlan) async throws -> TranscriptionEngine {
+        switch plan.transcribeEngine {
+        case .onDevice:
+            let modelPath = try await WhisperModelManager.shared.ensureDownloaded(plan.model).path
+            guard let engine = TranscriptionEngineFactory.onDeviceEngine(model: plan.model, modelPath: modelPath) else {
                 throw TranscribeError.engineUnavailable(
                     "裝置端轉錄引擎尚未建置。請執行 scripts/build-whisper.sh，並依 project.yml 內的註解加入 whisper.xcframework 後重新產生專案。"
                 )
             }
+            return engine
+        case .cloud:
+            guard let key = KeychainStore.apiKey() else { throw TranscribeError.noApiKey }
+            return CloudTranscriptionEngine(apiKey: key, baseUrl: plan.baseUrl, model: plan.cloudModel)
+        }
+    }
+
+    private func pipeline(jobId: String, plan: EnginePlan) async {
+        guard case .localFile(let path)? = job(jobId)?.source else { return }
+        let url = URL(fileURLWithPath: path)
+        let knownLanguage = plan.knownLanguage
+        update(jobId) { $0.status = .running }
+        do {
+            let engine = try await makeEngine(plan)
 
             let durationMs = try await AudioToPCM.durationMs(of: url)
-            let windows = WindowPlanner.plan(totalMs: durationMs, windowMs: windowMs, overlapMs: overlapMs)
+            let windows = WindowPlanner.plan(totalMs: durationMs, windowMs: plan.windowMs, overlapMs: plan.overlapMs)
             update(jobId) { $0.durationMs = durationMs; $0.totalWindows = windows.count }
 
             let startIndex = job(jobId)?.completedWindows ?? 0
