@@ -10,6 +10,24 @@
 
 ---
 
+## 實作狀態（branch `feat/video2text`，2026-06-05）
+
+> 程式碼已實作 M0–M6；**`swift test` 79 綠燈、`xcodebuild`（simulator 免簽）BUILD SUCCEEDED**。
+> 尚需「真機 / 網路 / 金鑰」才能驗證的執行期行為見下。
+
+- **M0 ✅ 完整驗證**：`MediaDlerCore/Transcribe/`（WindowPlanner / SegmentMerge / LanguageDecision / SubtitleVtt / TranscriptFormatter / Transcript / TranscriptionEngine）+ 32 個 XCTest；`Settings` 擴充；`project.yml` `CFBundleDocumentTypes`；`onOpenURL` 分流；`LocalMediaInput` 收檔複製；`LocalMediaSheet` + `TranscribeView` 串通。
+- **M1 ✅ 程式完成（待真機）**：`AudioToPCM`（AVAssetReader decodeRange）、`WhisperModelManager`（HF 下載 + NWPath Wi-Fi gate）、`LibWhisper`/`WhisperCppEngine`（**`#if canImport(whisper)` 守護**）、`KeychainStore`、`TranscriptJob/Store/Manager/Runner`（checkpoint/resume + beginBackgroundTask + 通知 + 引擎切換防呆）。
+  - ⚠️ **whisper 引擎決策（與 codex 討論結論）**：走 **vendored `whisper.xcframework`**（`build-xcframework.sh`），**非 SwiftPM**（master 已無可用 Package.swift）。產物不入 git → `make whisper`（`scripts/build-whisper.sh`）建置後，**取消 `project.yml` 內 whisper.xcframework 依賴註解**再 `make project`。引擎碼以 `canImport(whisper)` 守護，未建置時 app 照常編譯、裝置端轉錄會回報「請先建置引擎」。
+- **M3 ✅ 程式完成（待金鑰/網路）**：`CloudTranscriptionEngine`（OpenRouter JSON+base64）+ `WavEncoder`；引擎切換（`EnginePlan`：裝置端 60s/3s、雲端 WAV 5min）；設定頁三欄 + 壓縮開關 + 金鑰存 Keychain。**雲端路徑不需 xcframework，simulator+金鑰即可端到端跑。**
+- **M4 ✅**：結果頁「存成 .txt」→ `DocumentsStorage`。
+- **M5 ✅**：`TranscriptFormatter` 顯示斷句（已測）；`methodLabel` 顯示轉譯方式；歷史頁。
+- **M6 ✅ 程式完成（待真機）**：`AudioTrackExtractor`（AVAssetExportSession passthrough 無損 → .m4a）。
+- **M2 ⚠️ 部分**：ask-mode picker 加「轉成文字」→ 下載 bestaudio → 收編為 LocalMedia 走同一 pipeline。**YouTube CC 捷徑暫緩**（`SubtitleVtt` 已在 core 備好；YoutubeDL-iOS 字幕能力待確認，目前一律 fallback 下載音訊）。
+- **M7 ⬜ 未做**：sherpa-onnx 第二後端（選配/高階機，依計劃「先跑通 whisper.cpp」暫緩）。
+- **取捨/簡化（誠實記錄）**：雲端用一般 `URLSession`（非 background session）；whisper 即時文字為「逐窗回報」而非 intra-window C callback 串流；未註冊 `BGProcessingTaskRequest`（前景+寬限+checkpoint 已覆蓋多數情境）；base64 直接組（窗已上限 5min，未做 3-byte 串流寫出）。以上皆為可後續強化的 refinement。
+
+---
+
 ## Context（為什麼做這個）
 
 收到分享 → 變逐字稿。輸入三種，全部匯入同一條 pipeline：
