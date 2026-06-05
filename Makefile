@@ -8,7 +8,7 @@ XCODEPROJ := MediaDler.xcodeproj
 
 .DEFAULT_GOAL := help
 
-.PHONY: help project open test-core whisper clean
+.PHONY: help project open test-core whisper sherpa clean
 
 help: ## 顯示可用指令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -28,6 +28,9 @@ test-core: ## 跑 MediaDlerCore 純邏輯單元測試（不需 Xcode；Linux 亦
 whisper: ## 建置 on-device 轉錄引擎 whisper.xcframework（需 macOS + Xcode；產物不入 git）
 	scripts/build-whisper.sh
 	@echo "完成後請取消 project.yml 內 whisper.xcframework 依賴的註解，再執行 make project。"
+
+sherpa: ## 下載 sherpa-onnx iOS 執行庫 + swift wrapper（M7；產物不入 git）
+	scripts/fetch-sherpa-libs.sh
 
 clean: ## 刪除產生的專案檔與建置產物
 	rm -rf $(XCODEPROJ) .build DerivedData

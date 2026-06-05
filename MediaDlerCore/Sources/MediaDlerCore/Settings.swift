@@ -39,9 +39,36 @@ public enum AudioFormat: String, Codable, CaseIterable {
 /// (offline, private, no key); cloud goes through OpenRouter.
 public enum TranscribeEngine: String, Codable, CaseIterable { case onDevice, cloud }
 
-/// On-device ggml model selection. `base` is the default; `small` is more
-/// accurate but heavier. (M7 may add sherpa-onnx backends.)
-public enum TranscribeModel: String, Codable, CaseIterable { case base, small }
+/// Which on-device recognition backend a model runs on. Derived from the
+/// selected `TranscribeModel` — the UI never exposes "backend" directly.
+public enum OnDeviceBackend: String, Codable { case whisperCpp, sherpa }
+
+/// On-device model selection. `base`/`small`/`turboQ5` run on whisper.cpp;
+/// `senseVoice`/`paraformer`/`qwen3` run on sherpa-onnx. The on-device picker
+/// lists all of them and the backend is inferred from the choice.
+public enum TranscribeModel: String, Codable, CaseIterable {
+    case base, small, turboQ5            // whisper.cpp (ggml)
+    case senseVoice, paraformer, qwen3   // sherpa-onnx (ONNX Runtime)
+
+    public var backend: OnDeviceBackend {
+        switch self {
+        case .base, .small, .turboQ5: return .whisperCpp
+        case .senseVoice, .paraformer, .qwen3: return .sherpa
+        }
+    }
+
+    /// Short label for the "轉譯方式" line on the result screen.
+    public var label: String {
+        switch self {
+        case .base: return "base"
+        case .small: return "small"
+        case .turboQ5: return "turbo-q5"
+        case .senseVoice: return "SenseVoice"
+        case .paraformer: return "Paraformer"
+        case .qwen3: return "Qwen3"
+        }
+    }
+}
 
 /// User-locked transcription language. `auto` lets the engine detect; an
 /// explicit choice both improves accuracy and (for `zh`) forces the

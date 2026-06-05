@@ -33,13 +33,17 @@ final class TranscriptionManager: ObservableObject {
     private func plan(for settings: AppSettings) -> EnginePlan {
         switch settings.transcribeEngine {
         case .onDevice:
-            // 60s window + 3s overlap, also the checkpoint unit.
+            // 60s window + 3s overlap, also the checkpoint unit. Engine id is
+            // backend-prefixed so switching whisper↔sherpa (different windowing
+            // behaviour) discards the checkpoint and re-transcribes cleanly.
+            let model = settings.transcribeModel
+            let prefix = model.backend == .sherpa ? "sherpa" : "whispercpp"
             return EnginePlan(
                 transcribeEngine: .onDevice,
-                model: settings.transcribeModel,
+                model: model,
                 knownLanguage: settings.transcribeLanguage,
-                engineId: "whispercpp-\(settings.transcribeModel.rawValue)",
-                method: .onDevice(model: settings.transcribeModel.rawValue),
+                engineId: "\(prefix)-\(model.rawValue)",
+                method: .onDevice(model: model.label),
                 windowMs: 60_000, overlapMs: 3_000,
                 baseUrl: settings.cloudBaseUrl, cloudModel: settings.cloudModel
             )
@@ -146,6 +150,14 @@ final class TranscriptionManager: ObservableObject {
 
     private func makeEngine(_ plan: EnginePlan) async throws -> TranscriptionEngine {
         switch plan.transcribeEngine {
+        case .onDevice where plan.model.backend == .sherpa:
+            let dir = try await SherpaModelManager.shared.ensureDownloaded(plan.model)
+            guard let engine = SherpaEngineFactory.engine(model: plan.model, modelDir: dir) else {
+                throw TranscribeError.engineUnavailable(
+                    "sherpa-onnx 引擎尚未建置。請執行 scripts/fetch-sherpa-libs.sh，並依 project.yml 內的註解加入 sherpa-onnx.xcframework 後重新產生專案。"
+                )
+            }
+            return engine
         case .onDevice:
             let modelPath = try await WhisperModelManager.shared.ensureDownloaded(plan.model).path
             guard let engine = TranscriptionEngineFactory.onDeviceEngine(model: plan.model, modelPath: modelPath) else {

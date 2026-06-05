@@ -24,6 +24,9 @@ final class WhisperModelManager: NSObject, ObservableObject {
         switch model {
         case .base: name = "ggml-base.bin"
         case .small: name = "ggml-small.bin"
+        case .turboQ5: name = "ggml-large-v3-turbo-q5_0.bin"
+        case .senseVoice, .paraformer, .qwen3:
+            preconditionFailure("sherpa model has no whisper ggml URL — use SherpaModelManager")
         }
         return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(name)")!
     }

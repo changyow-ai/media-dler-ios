@@ -18,6 +18,18 @@ packages:
   # Simplified→Taiwan-traditional (s2twp) for the transcription pipeline.
   # OpenCCConverter is guarded by `#if canImport(OpenCC)`; this dependency
   # activates it. Phrase-level localisation beats character-level conversion.
+  # Pure-Swift BZip2 + TAR reader for on-device extraction of sherpa-onnx
+  # `.tar.bz2` model archives (Apple's Compression framework has no bzip2).
+  SWCompression:
+    url: https://github.com/tsolomko/SWCompression
+    # Pinned: 4.8.5+ raised the min deployment target to iOS 17; 4.7.0 has no
+    # platforms constraint and works on this app's iOS 16 target.
+    exactVersion: "4.7.0"
+  # SWCompression's transitive dep. 2.0.3+ require iOS 17; pin 2.0.2 (no
+  # platforms constraint) so resolution stays iOS 16-compatible.
+  BitByteData:
+    url: https://github.com/tsolomko/BitByteData
+    exactVersion: "2.0.2"
   SwiftyOpenCC:
     url: https://github.com/ddddxxx/SwiftyOpenCC
     # v2.0.0-beta is the SPM-native release: it bundles the OpenCC dictionaries
@@ -86,6 +98,10 @@ targets:
         product: YoutubeDL
       - package: SwiftyOpenCC
         product: OpenCC
+      - package: SWCompression
+        product: SWCompression
+      - package: BitByteData
+        product: BitByteData
       - target: MediaDlerShare
       # On-device transcription engine (whisper.cpp). NOT in git — build it
       # with `make whisper` (scripts/build-whisper.sh), then UNCOMMENT BOTH lines
@@ -98,6 +114,17 @@ targets:
       # - framework: Vendor/whisper.cpp/build-apple/whisper.xcframework
       #   embed: false
       # - sdk: CoreML.framework
+      # sherpa-onnx second on-device backend (M7). Run scripts/fetch-sherpa-libs.sh,
+      # then UNCOMMENT the two frameworks below AND (see that script's output) add
+      # to this target's `settings.base`:
+      #   SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SHERPA_ONNX_ENABLED"
+      #   SWIFT_OBJC_BRIDGING_HEADER: Vendor/sherpa-onnx/SherpaOnnx-Bridging-Header.h
+      #   OTHER_LDFLAGS: "$(inherited) -lc++"
+      # and add the wrapper to `sources`: - path: Vendor/sherpa-onnx/SherpaOnnx.swift
+      # - framework: Vendor/sherpa-onnx/sherpa-onnx.xcframework
+      #   embed: false
+      # - framework: Vendor/sherpa-onnx/onnxruntime.xcframework
+      #   embed: false
 
   MediaDlerShare:
     type: app-extension

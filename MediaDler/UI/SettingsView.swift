@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var models = WhisperModelManager.shared
+    @ObservedObject private var sherpaModels = SherpaModelManager.shared
     @State private var apiKey = ""
     @State private var modelTick = 0
 
@@ -91,11 +92,15 @@ struct SettingsView: View {
         if settings.settings.transcribeEngine == .onDevice {
             Section("裝置端模型") {
                 Picker("模型", selection: $settings.settings.transcribeModel) {
-                    Text("base（較快、較省記憶體）").tag(TranscribeModel.base)
-                    Text("small（較準、較大）").tag(TranscribeModel.small)
+                    Text("base · whisper（較快）").tag(TranscribeModel.base)
+                    Text("small · whisper（較準、較大）").tag(TranscribeModel.small)
+                    Text("turbo-q5 · whisper（準，但很慢）").tag(TranscribeModel.turboQ5)
+                    Text("SenseVoice · sherpa（建議，中文準）").tag(TranscribeModel.senseVoice)
+                    Text("Paraformer · sherpa（純中文最準、無標點）").tag(TranscribeModel.paraformer)
+                    Text("Qwen3 · sherpa（實驗／高階機，恐 OOM）").tag(TranscribeModel.qwen3)
                 }
                 modelStatusRow(settings.settings.transcribeModel)
-                Text("模型首次使用時下載（不內建在 App），存在 App 支援目錄。非 Wi-Fi 會先詢問。")
+                Text(modelHint(settings.settings.transcribeModel))
                     .font(.footnote).foregroundStyle(.secondary)
             }
         } else {
@@ -120,25 +125,48 @@ struct SettingsView: View {
 
     @ViewBuilder private func modelStatusRow(_ model: TranscribeModel) -> some View {
         let _ = modelTick // recompute after delete
-        if models.activeDownload == model {
+        let isSherpa = model.backend == .sherpa
+        let downloading = isSherpa ? (sherpaModels.activeDownload == model) : (models.activeDownload == model)
+        let progress = isSherpa ? sherpaModels.progress : models.progress
+        let downloaded = isSherpa ? SherpaModelManager.isDownloaded(model) : WhisperModelManager.isDownloaded(model)
+
+        if downloading {
             HStack {
                 Text("下載中…")
                 Spacer()
-                ProgressView(value: models.progress).frame(width: 120)
+                ProgressView(value: progress).frame(width: 120)
             }
-        } else if WhisperModelManager.isDownloaded(model) {
+        } else if downloaded {
             HStack {
                 Label("已下載", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 Spacer()
                 Button("刪除", role: .destructive) {
-                    models.delete(model)
+                    if isSherpa { sherpaModels.delete(model) } else { models.delete(model) }
                     modelTick += 1
                 }
             }
         } else {
             Button("下載模型") {
-                Task { try? await models.ensureDownloaded(model) }
+                Task {
+                    if isSherpa { try? await sherpaModels.ensureDownloaded(model) }
+                    else { try? await models.ensureDownloaded(model) }
+                }
             }
+        }
+    }
+
+    private func modelHint(_ model: TranscribeModel) -> String {
+        switch model {
+        case .base, .small:
+            return "whisper.cpp 模型，首次使用下載（不內建在 App）。中文偏弱，難詞易錯。"
+        case .turboQ5:
+            return "whisper 量化版（574MB），準度接近雲端 turbo，但裝置端 CPU 上很慢。需先 make whisper 建置引擎。"
+        case .senseVoice:
+            return "sherpa-onnx，中文準度遠勝 whisper、有標點、快於即時 —— 離線首選。需先 make sherpa 建置引擎。"
+        case .paraformer:
+            return "sherpa-onnx，純中文最準（無標點，靠斷句可讀）。需先 make sherpa 建置引擎。"
+        case .qwen3:
+            return "sherpa-onnx，多語高品質但模型大、自回歸，低記憶體裝置可能被系統殺（實驗／高階機）。需先 make sherpa。"
         }
     }
 
