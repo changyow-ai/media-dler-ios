@@ -15,7 +15,10 @@ final class TranscriptionManager: ObservableObject {
     @Published private(set) var jobs: [TranscriptJob]
 
     private let runner = TranscriptionRunner()
-    private var task: Task<Void, Never>?
+    /// One in-flight pipeline Task per job id. Keying by id means cancelling or
+    /// removing one job never aborts a *different* job that happens to be the
+    /// most recently started one (and never deletes its input out from under it).
+    private var tasks: [String: Task<Void, Never>] = [:]
 
     /// Resolved engine choice + window config for one run.
     private struct EnginePlan {
@@ -124,14 +127,16 @@ final class TranscriptionManager: ObservableObject {
     }
 
     func cancel(_ id: String) {
-        task?.cancel()
+        tasks[id]?.cancel()
+        tasks[id] = nil
         update(id) { $0.status = .canceled }
         persist()
         cleanupInput(id)
     }
 
     func remove(_ id: String) {
-        task?.cancel()
+        tasks[id]?.cancel()
+        tasks[id] = nil
         cleanupInput(id)
         jobs.removeAll { $0.id == id }
         persist()
@@ -140,9 +145,9 @@ final class TranscriptionManager: ObservableObject {
     // MARK: Pipeline
 
     private func run(jobId: String, plan: EnginePlan) {
-        task?.cancel()
+        tasks[jobId]?.cancel()
         runner.beginGrace(name: "transcribe-\(jobId)")
-        task = Task { [weak self] in
+        tasks[jobId] = Task { [weak self] in
             await self?.pipeline(jobId: jobId, plan: plan)
             self?.runner.endGrace()
         }
@@ -199,7 +204,14 @@ final class TranscriptionManager: ObservableObject {
                     pcm: pcm, window: window, knownLanguage: knownLanguage
                 ) { [weak self] partial in
                     Task { @MainActor in
-                        self?.update(jobId) { $0.text = SegmentMerge.merge([base, partial.partialText]) }
+                        self?.update(jobId) {
+                            // Live preview only. This Task is detached, so it can
+                            // land AFTER the window's final merge / the terminal
+                            // OpenCC pass; guard on .running so a stale partial
+                            // never clobbers the finalized (converted) text.
+                            guard $0.status == .running else { return }
+                            $0.text = SegmentMerge.merge([base, partial.partialText])
+                        }
                     }
                 }
                 merged = SegmentMerge.merge([merged, result.text])

@@ -149,9 +149,15 @@ struct TranscribeView: View {
         guard !started else { return }
         if let j = job, j.status == .completed { started = true; return }
         // Only the on-device engine downloads a model — gate that on Wi-Fi.
+        // The download-state check MUST be backend-aware: WhisperModelManager
+        // traps (preconditionFailure) on sherpa models, so route each backend
+        // to its own manager.
         if settings.transcribeEngine == .onDevice {
             let model = settings.transcribeModel
-            if !WhisperModelManager.isDownloaded(model) && WhisperModelManager.isExpensiveNetwork() {
+            let downloaded = model.backend == .sherpa
+                ? SherpaModelManager.isDownloaded(model)
+                : WhisperModelManager.isDownloaded(model)
+            if !downloaded && WhisperModelManager.isExpensiveNetwork() {
                 confirmExpensive = true
                 return
             }
